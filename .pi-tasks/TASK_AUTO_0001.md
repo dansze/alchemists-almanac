@@ -3,7 +3,7 @@ id: TASK_AUTO_0001
 state: in_progress
 phase: done
 created_at: 2026-09-19T18:10:16.370Z
-updated_at: 2026-09-19T21:45:55.938Z
+updated_at: 2026-09-19T21:46:37.089Z
 title: Implement mod as described in TODO.md
 ---
 
@@ -25,7 +25,7 @@ A4: Automatic discovery when the player successfully brews a potion, detected vi
 ## tasks
 
 - [x] P01 TASK_0003 a1  Create directory structure, `.omwscripts` manifest, and mod registration documentation — establish foundational scaffolding —
-- [ ] P02 TASK_0004 a1  Verify script loads and runs in OpenMW 0.50+, document Lua 5.1 sandbox constraints, and document serialization limits for `onSave()`/`onLoad()` — ensure execution baseline and compliance —
+- [ ] P02 TASK_0004 a2:interrupted  Verify script loads and runs in OpenMW 0.50+, document Lua 5.1 sandbox constraints, and document serialization limits for `onSave()`/`onLoad()` — ensure execution baseline and compliance —
 - [ ] P03  Investigate `types.Ingredient.record()` effect field names, low-level `ESM4Ingredient` mappings, complete engine handlers, and `openmw.content` LOAD capabilities — verify via console and validate against known Morrowind data —
 - [ ] P04  Build ingredient → effects, effects → shared ingredients, and pair/triple → potion effects lookup tables, plus recipe reverse lookup and effect ID name mapping — replicate internal C++ alchemy logic in Lua —
 - [ ] P05  Create LOAD-context script to build effect database during content load, register it via `interfaces.AlchemyHelper.queryEffects(ids)`, and document `reloadlua` limitations to handle uninitialized DB in PLAYER contexts — ensure DB is ready before scripts start — [decisions: fully rebuild at LOAD time, only persist player discoveries (discovered recipes) and preferences via onSave()/onLoad()] —
