@@ -3,7 +3,7 @@ id: TASK_AUTO_0001
 state: in_progress
 phase: done
 created_at: 2026-09-19T18:10:16.370Z
-updated_at: 2026-09-19T18:10:16.370Z
+updated_at: 2026-09-19T19:00:39.487Z
 title: Implement mod as described in TODO.md
 ---
 
@@ -24,7 +24,7 @@ A4: Automatic discovery when the player successfully brews a potion, detected vi
 
 ## tasks
 
-- [ ] P01  Create directory structure, `.omwscripts` manifest, and mod registration documentation — establish foundational scaffolding —
+- [x] P01 TASK_0003 a1  Create directory structure, `.omwscripts` manifest, and mod registration documentation — establish foundational scaffolding —
 - [ ] P02  Verify script loads and runs in OpenMW 0.50+, document Lua 5.1 sandbox constraints, and document serialization limits for `onSave()`/`onLoad()` — ensure execution baseline and compliance —
 - [ ] P03  Investigate `types.Ingredient.record()` effect field names, low-level `ESM4Ingredient` mappings, complete engine handlers, and `openmw.content` LOAD capabilities — verify via console and validate against known Morrowind data —
 - [ ] P04  Build ingredient → effects, effects → shared ingredients, and pair/triple → potion effects lookup tables, plus recipe reverse lookup and effect ID name mapping — replicate internal C++ alchemy logic in Lua —
@@ -34,3 +34,4 @@ A4: Automatic discovery when the player successfully brews a potion, detected vi
 - [ ] P08  Handle UI panel positioning relative to alchemy menu/screen corner and make theme/style configurable via plain Lua table — avoid custom metatables in config —
 - [ ] P09  Design save schema, implement `onSave()` and `onLoad()` handlers with version migration, and wire up automatic recipe discovery via `onObjectAdded()` on player inventory — persist only discoveries/preferences to save files — [decisions: fully rebuild at LOAD time, only persist player discoveries (discovered recipes) and preferences via onSave()/onLoad() — automatic discovery when the player successfully brews a potion, detected via `onObjectAdded()` on the player inventory] —
 - [ ] P10  Guard all record lookups and database queries with `pcall`, handle missing ingredients/ESP unloads, duplicate selections, uninitialized databases, and batch startup table builds to avoid >1s freezes — ensure graceful degradation and performance —
+

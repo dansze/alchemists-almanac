@@ -1,0 +1,15 @@
+# Alchemist's Almanac - OpenMW Lua Mod
+#
+# Directory name: alchemy-helper
+# Mod title:      Alchemist's Almanac
+#
+# The directory "alchemy-helper" is the internal project name;
+# the mod appears to players as "Alchemist's Almanac".
+#
+# A general in-game reference for alchemy ingredients and their vendors.
+# Provides a filterable ingredient list and a shopping planner for finding
+# merchants that sell ingredients.
+#
+# Target: OpenMW 0.50+
+
+GLOBAL: scripts/alchemy-helper/init.lua
