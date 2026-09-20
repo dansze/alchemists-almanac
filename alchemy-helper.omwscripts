@@ -13,3 +13,4 @@
 # Target: OpenMW 0.50+
 
 GLOBAL: scripts/alchemy-helper/init.lua
+LOAD:   scripts/alchemy-helper/load-db.lua
