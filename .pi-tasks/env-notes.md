@@ -6,3 +6,4 @@ OpenMW binary found at `/home/dsze/.local/bin/openmw`, loaded mod directory with
 luac 5.5 available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac`, correctly validates Lua 5.5 syntax	TASK_0006	mu9064wr-l1mfbida	lua:luac
 `openmw.*` Lua modules are compiled into the OpenMW binary and not available as standalone Lua packages; verification used mock modules in `/tmp` to test the real shipped artifact	TASK_0006	mu9064wr-l1mfbida	lua:openmw
 The spec's sharedIngredients regex `^[a-zA-Z0-9_]+(:[a-zA-Z0-9_]+)*$` is invalid for Lua patterns — `*` cannot follow capture groups in Lua's pattern grammar. The actual data is correctly formatted.	TASK_0006	mu9064wr-l1mfbida	verify:lua-pattern-bug
+luac 5.5.1 available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac`, correctly validates Lua 5.5 syntax.	TASK_0009	mu9cnbgm-qhs7wri0	lua:5.5.1

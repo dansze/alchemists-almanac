@@ -14,3 +14,4 @@
 
 GLOBAL: scripts/alchemy-helper/init.lua
 LOAD:   scripts/alchemy-helper/load-db.lua
+PLAYER: scripts/alchemy-helper/alchemy-binding.lua
