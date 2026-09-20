@@ -1,0 +1,2 @@
+TASK_AUTO_0001	UNOBSERVED — NOT a pass: no integration, lockfile or boot command was discoverable here, so the gate ran nothing at all; statics passed, but this run produced NO evidence that the assembled product builds, boots or works.	final-gate
+TASK_0013	work did not verify: — committed code (shipped deliverable) still contains the hardcoded `KEYBIND = 'l'` constant and its direct `key ~= KEYBIND` comparison; Settings import, Settings reading, and Settings registration are all absent from the committed state. The correct implementation was applied b

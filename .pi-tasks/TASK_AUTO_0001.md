@@ -1,9 +1,9 @@
 ---
 id: TASK_AUTO_0001
-state: in_progress
+state: completed
 phase: done
 created_at: 2026-09-19T18:10:16.370Z
-updated_at: 2026-09-20T19:04:33.582Z
+updated_at: 2026-09-20T19:04:33.648Z
 title: Implement mod as described in TODO.md
 ---
 
@@ -35,3 +35,6 @@ A4: Automatic discovery when the player successfully brews a potion, detected vi
 - [x] P09 TASK_0011 a1  Design save schema, implement `onSave()` and `onLoad()` handlers with version migration, and wire up automatic recipe discovery via `onObjectAdded()` on player inventory — persist only discoveries/preferences to save files — [decisions: fully rebuild at LOAD time, only persist player discoveries (discovered recipes) and preferences via onSave()/onLoad() — automatic discovery when the player successfully brews a potion, detected via `onObjectAdded()` on the player inventory] —
 - [x] P10 TASK_0012 a1  Guard all record lookups and database queries with `pcall`, handle missing ingredients/ESP unloads, duplicate selections, uninitialized databases, and batch startup table builds to avoid >1s freezes — ensure graceful degradation and performance —
 
+## gates
+
+- 2026-09-20T19:04:33.647Z final-gate: UNOBSERVED — UNOBSERVED — NOT a pass: no integration, lockfile or boot command was discoverable here, so the gate ran nothing at all; statics passed, but this run produced NO evidence that the assembled product builds, boots or works.

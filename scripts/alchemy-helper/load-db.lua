@@ -1,8 +1,13 @@
--- Alchemist's Almanac — Alchemy Effect Database (LOAD context)
+-- Alchemist's Almanac — Alchemy Effect Database + Settings Registration (LOAD context)
 --
 -- Runs once during content load. Builds the complete effect lookup database
 -- from `content.ingredients.records` and `content.magicEffects.records`,
 -- then registers `queryEffects(ids)` on `interfaces.AlchemyHelper`.
+--
+-- Also registers the Settings page / group / keybind field so users can
+-- view and change the alchemy-helper keybind in-game.  Settings
+-- persistence is handled by `openmw.interfaces.Settings` — no custom
+-- config files or ad-hoc storage.
 --
 -- All tables live at module scope. `queryEffects` is a live closure over them
 -- — nothing is serialized. Database is fully rebuilt from scratch on every
@@ -12,7 +17,40 @@
 -- (world not initialized in LOAD). No prohibited ops.
 
 local content = require('openmw.content')
-local interfaces = require('openmw.interfaces')
+local I = require('openmw.interfaces')
+
+-- ── Settings registration (AlchemyHelper keybind) ──────────────────────────
+-- Registered once per LOAD; idempotent.  Value is read by alchemy-binding.lua
+-- via openmw.storage on each onKeyPress invocation.
+
+I.Settings.registerPage {
+    key = 'AlchemyHelper',
+    l10n = 'AlchemyHelper',
+    name = 'AlchemyHelper',
+    description = 'AlchemyHelper',
+}
+
+I.Settings.registerGroup {
+    key = 'SettingsPlayerAlchemyHelper',
+    page = 'AlchemyHelper',
+    l10n = 'AlchemyHelper',
+    name = 'AlchemyHelper',
+    description = 'AlchemyHelperSettingsDesc',
+    permanentStorage = false,
+    settings = {
+        {
+            key = 'AlchemyHelperKeybind',
+            renderer = 'inputBinding',
+            name = 'AlchemyHelperKeybind',
+            description = 'AlchemyHelperKeybindDesc',
+            default = 'l',
+            argument = {
+                key = 'AlchemyHelperKeybind',
+                type = 'trigger',
+            },
+        },
+    },
+}
 
 local function logError(msg)
     if type(print) == 'function' then

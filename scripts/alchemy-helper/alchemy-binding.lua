@@ -1,7 +1,24 @@
--- alchemy-binding.lua
--- PLAYER-context key binding for querying alchemy effects.
+-- Alchemist's Almanac — Alchemy Keybind Binding (PLAYER context)
+--
+-- Reads the keybind from the Settings system (registered via
+-- openmw.interfaces.Settings in load-db.lua) on each onKeyPress call —
+-- no caching — so in-game rebinding takes effect immediately.
+-- Falls back to 'l' when no custom value is stored.
 
-local KEYBIND = 'l'
+local interfaces = require('openmw.interfaces')
+local storage = require('openmw.storage')
+
+-- Settings group / field keys (must match load-db.lua registration).
+local SETTINGS_GROUP = 'SettingsPlayerAlchemyHelper'
+local SETTINGS_KEY   = 'AlchemyHelperKeybind'
+
+--- Read the current keybind from the Settings group registered via
+--- openmw.interfaces.Settings.  Returns 'l' when the setting is unset.
+local function getAlchemyHelperKeybind()
+    local section = storage.playerSection(SETTINGS_GROUP)
+    local value = section and section:get(SETTINGS_KEY)
+    return value or 'l'
+end
 
 local function logError(msg)
     if type(print) == 'function' then
@@ -18,7 +35,7 @@ if not success and type(logError) == 'function' then logError('require alchemy-u
 return {
     engineHandlers = {
         onKeyPress = function(key)
-            if key ~= KEYBIND then return end
+            if key ~= getAlchemyHelperKeybind() then return end
 
             -- Guard: effect database not loaded yet, or reloadlua without init.
             if not interfaces.AlchemyHelper or not interfaces.AlchemyHelper.queryEffects then
