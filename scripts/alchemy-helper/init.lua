@@ -261,6 +261,170 @@ end
 -- Export the complete lookup table.
 -- All subtables contain only plain Lua values: nil, strings, numbers, nested plain tables.
 -- No functions, no metatables, no circular references.
+
+-- ── Persistence: discovered recipes & preferences ──────────────────────────
+-- Module-level plain Lua table. No functions, metatables, or userdata.
+-- Keys are canonical sorted-string ingredient combos: "id1:id2", "id1:id2:id3".
+local discoveredMap = {}
+
+-- User UI preferences placeholder. Plain table, no metatables.
+local preferences = {}
+
+--- Resolve a potion base ID to a deduplicated list of distinct ingredient IDs.
+--- Checks content.potions.record first, then types.Potion.record.
+--- Returns nil if the potion record has no ingredient data.
+local function getPotionIngredients(potionId)
+    if not potionId or type(potionId) ~= 'string' or potionId == '' then
+        return nil
+    end
+    local record = content.potions and content.potions.record(potionId)
+    if record then
+        local ingredients = {}
+        if record.effects then
+            for _, eff in ipairs(record.effects) do
+                if eff and eff.ingredient then
+                    ingredients[#ingredients + 1] = eff.ingredient
+                end
+            end
+        end
+        if #ingredients > 0 then return ingredients end
+    end
+    record = types.Potion and types.Potion.record(potionId)
+    if record then
+        local ingredients = {}
+        if record.effects then
+            for _, eff in ipairs(record.effects) do
+                if eff and eff.ingredient then
+                    ingredients[#ingredients + 1] = eff.ingredient
+                end
+            end
+        end
+        if #ingredients > 0 then return ingredients end
+    end
+    return nil
+end
+
+--- Discover a recipe from ingredient IDs.
+--- Deduplicates, sorts, builds canonical key, and inserts into discoveredMap
+--- if the key exists in pairEffects or tripleEffects.
+local function discoverRecipe(ingredientIds)
+    if not ingredientIds or #ingredientIds == 0 then return end
+    local seen = {}
+    local distinct = {}
+    for _, id in ipairs(ingredientIds) do
+        if type(id) == 'string' and id ~= '' and not seen[id] then
+            seen[id] = true
+            distinct[#distinct + 1] = id
+        end
+    end
+    local n = #distinct
+    if n < 2 or n > 3 then return end
+    table.sort(distinct)
+    local key
+    if n == 2 then
+        key = distinct[1] .. ':' .. distinct[2]
+    else
+        key = distinct[1] .. ':' .. distinct[2] .. ':' .. distinct[3]
+    end
+    if pairEffects[key] or tripleEffects[key] then
+        discoveredMap[key] = true
+    end
+end
+
+--- onSave handler: serialize discoveredMap into versioned schema.
+--- Returns plain table: { version = 1, discovered = { keys... }, preferences = {} }
+--- No functions, metatables, userdata, or non-serializable values.
+local function onSave()
+    local discovered = {}
+    for key in pairs(discoveredMap) do
+        discovered[#discovered + 1] = key
+    end
+    return {
+        version = 1,
+        discovered = discovered,
+        preferences = preferences,
+    }
+end
+
+--- onLoad handler: deserialize, migrate, restore, re-discover from inventory.
+local function onLoad(saved)
+    if not saved then return end
+
+    -- Version-gated migration switch.
+    local version = saved.version
+    if version == 1 then
+        -- No migration needed for v1.
+    elseif version == 2 then
+        -- Migration from v2 (stub).
+    elseif version == 3 then
+        -- Migration from v3 (stub).
+    else
+        -- Unknown version — reject silently.
+        return
+    end
+
+    -- Restore discovered recipes from saved array.
+    if saved.discovered then
+        for _, key in ipairs(saved.discovered) do
+            discoveredMap[key] = true
+        end
+    end
+
+    -- Restore preferences.
+    if saved.preferences then
+        for k, v in pairs(saved.preferences) do
+            preferences[k] = v
+        end
+    end
+
+    -- Re-discover recipes for potions already in player inventory at load time.
+    local inventory = openmw.player and openmw.player.getInventory and openmw.player.getInventory()
+    if inventory then
+        for _, item in ipairs(inventory) do
+            local baseId = item.getBaseId and item:getBaseId()
+            if not baseId then baseId = item.baseId end
+            if not baseId then baseId = item.refId end
+            if baseId and type(baseId) == 'string' and baseId ~= '' then
+                local ingredients = getPotionIngredients(baseId)
+                if ingredients then
+                    discoverRecipe(ingredients)
+                end
+            end
+        end
+    end
+end
+
+--- onObjectAdded handler: filter to player inventory, resolve, discover.
+--- Rejects world/container spawns; only processes player-inventory potions.
+local function onObjectAdded(object)
+    if not object then return end
+
+    -- Confirm object belongs to player's inventory via reference comparison.
+    local inventory = openmw.player and openmw.player.getInventory and openmw.player.getInventory()
+    local isPlayerItem = false
+    if inventory then
+        for _, item in ipairs(inventory) do
+            if item == object then
+                isPlayerItem = true
+                break
+            end
+        end
+    end
+    if not isPlayerItem then return end
+
+    -- Get potion base ID.
+    local baseId = object.getBaseId and object:getBaseId()
+    if not baseId then baseId = object.baseId end
+    if not baseId then baseId = object.refId end
+    if not baseId or type(baseId) ~= 'string' or baseId == '' then return end
+
+    -- Resolve ingredients and discover recipe.
+    local ingredients = getPotionIngredients(baseId)
+    if ingredients then
+        discoverRecipe(ingredients)
+    end
+end
+
 return {
     ingredientEffects = ingredientEffects,
     effectIngredients = effectIngredients,
@@ -269,4 +433,9 @@ return {
     recipeEffects = recipeEffects,
     sharedIngredients = sharedIngredients,
     effectNames = effectNames,
+    engineHandlers = {
+        onSave = onSave,
+        onLoad = onLoad,
+        onObjectAdded = onObjectAdded,
+    },
 }
