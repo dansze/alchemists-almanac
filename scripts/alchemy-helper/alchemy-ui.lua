@@ -15,6 +15,107 @@ local lookupTables = require('scripts.alchemy-helper.init')
 local ingredientEffects = lookupTables.ingredientEffects or {}
 
 -- ---------------------------------------------------------------------------
+-- Configuration — plain Lua table, no metatables, no classes.
+-- Modders copy/paste/edit this table directly.
+-- ---------------------------------------------------------------------------
+local CONFIG = {
+    positioning = {
+        -- Screen corner to anchor the panel to.
+        -- Valid values: "top-left", "top-right", "bottom-left", "bottom-right".
+        -- Defaults to "bottom-right".
+        corner = "bottom-right",
+        -- Pixel offset inward from the selected corner.
+        offsetX = 50,
+        offsetY = 50,
+    },
+    theme = {
+        -- Color overrides (number or nil). nil = leave buildPanelLayout default.
+        -- Values are packed ARGB integers (e.g. 0xFF123456).
+        backgroundColor = nil,
+        borderColor = nil,
+        titleColor = nil,
+        textColor = nil,
+        buttonColor = nil,
+        -- Font sizes (number).
+        fontSizeTitle = 16,
+        fontSizeBody = 12,
+        -- Spacing (number).
+        padding = 5,
+        margin = 2,
+        -- Visual toggle.
+        border = true,
+    },
+}
+
+-- Resolve screen dimensions from openmw.core or use a reasonable default.
+local function getScreenSize()
+    local width = 1920
+    local height = 1080
+    if _G.openmw and _G.openmw.core then
+        local s = _G.openmw.core.screen
+        if type(s) == 'table' and s.width and s.height then
+            width = s.width
+            height = s.height
+        end
+    end
+    return width, height
+end
+
+-- Map a corner string to (x, y) placement for a panel of given dimensions.
+-- Unrecognized corners fall back to "bottom-right".
+local function calcPosition(corner, panelWidth, panelHeight, ox, oy)
+    local w, h = getScreenSize()
+    local dx = ox or 50
+    local dy = oy or 50
+
+    if type(corner) ~= 'string' or corner ~= 'top-left' and corner ~= 'top-right' and corner ~= 'bottom-left' and corner ~= 'bottom-right' then
+        return { x = w - panelWidth - dx, y = h - panelHeight - dy }
+    end
+
+    if corner == 'top-left' then
+        return { x = dx, y = dy }
+    elseif corner == 'top-right' then
+        return { x = w - panelWidth - dx, y = dy }
+    elseif corner == 'bottom-left' then
+        return { x = dx, y = h - panelHeight - dy }
+    else
+        return { x = w - panelWidth - dx, y = h - panelHeight - dy }
+    end
+end
+
+-- Merge CONFIG into a layout table returned by buildPanelLayout().
+-- Modifies props in-place (with nil-safety for theme values).
+-- Returns the layout for convenience.
+local function applyConfigToLayout(layout, config)
+    local pos = config and config.positioning
+    local theme = config and config.theme
+
+    if pos then
+        local pw = layout.props and layout.props.width or 400
+        local ph = layout.props and layout.props.height or 500
+        local valid = pos.corner == 'bottom-right' or pos.corner == 'bottom-left' or pos.corner == 'top-right' or pos.corner == 'top-left'
+        local px = valid and calcPosition(pos.corner, pw, ph, pos.offsetX, pos.offsetY) or calcPosition('bottom-right', pw, ph, 50, 50)
+        layout.props.x = px.x
+        layout.props.y = px.y
+    end
+
+    if theme then
+        if theme.fontSizeTitle ~= nil then layout.props.fontSizeTitle = theme.fontSizeTitle end
+        if theme.fontSizeBody ~= nil then layout.props.fontSize = theme.fontSizeBody end
+        if theme.padding ~= nil then layout.props.padding = theme.padding end
+        if theme.margin ~= nil then layout.props.margin = theme.margin end
+        if theme.backgroundColor ~= nil then layout.props.backgroundColor = theme.backgroundColor end
+        if theme.borderColor ~= nil then layout.props.borderColor = theme.borderColor end
+        if theme.titleColor ~= nil then layout.props.titleColor = theme.titleColor end
+        if theme.textColor ~= nil then layout.props.textColor = theme.textColor end
+        if theme.buttonColor ~= nil then layout.props.buttonColor = theme.buttonColor end
+        if theme.border ~= nil then layout.props.border = theme.border end
+    end
+
+    return layout
+end
+
+-- ---------------------------------------------------------------------------
 -- Module state — plain table, no custom metatables.
 -- ---------------------------------------------------------------------------
 local AlchemyUI = {}
@@ -118,7 +219,7 @@ local function createPanel()
     end
     -- TODO: confirm the exact openmw.ui.create() call and return value
     -- openmw_aux.ui may provide helper: openmw_aux.ui.createWindow(...)
-    local layout = buildPanelLayout()
+    local layout = applyConfigToLayout(buildPanelLayout(), CONFIG)
     local panel = openmw.ui.create and openmw.ui.create(layout)
     -- Fallback stub if openmw.ui.create is not available:
     -- panel = openmw_aux.ui.createWindow and openmw_aux.ui.createWindow('AlchemyEffects')
