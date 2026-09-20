@@ -3,7 +3,7 @@ id: TASK_AUTO_0001
 state: in_progress
 phase: done
 created_at: 2026-09-19T18:10:16.370Z
-updated_at: 2026-09-20T16:37:27.940Z
+updated_at: 2026-09-20T19:04:33.582Z
 title: Implement mod as described in TODO.md
 ---
 
@@ -33,5 +33,5 @@ A4: Automatic discovery when the player successfully brews a potion, detected vi
 - [x] P07 TASK_0009 a1  Detect alchemy menu via MWUI introspection or `onActivated()` at alchemy labs and add key binding to trigger on-demand ingredient lookup against pre-built database — auto-responsive detection not required; rely on manual trigger for data — [decisions: detect the alchemy menu via MWUI introspection or the `onActivated()` event at alchemy labs (whichever proves feasible during Phase 5.1 investigation), but for retrieving ingredient IDs, rely on the **on-demand keybind (Phase 5.3) triggering a lookup against the pre-built effect database from Phase 3**] —
 - [x] P08 TASK_0010 a1  Handle UI panel positioning relative to alchemy menu/screen corner and make theme/style configurable via plain Lua table — avoid custom metatables in config —
 - [x] P09 TASK_0011 a1  Design save schema, implement `onSave()` and `onLoad()` handlers with version migration, and wire up automatic recipe discovery via `onObjectAdded()` on player inventory — persist only discoveries/preferences to save files — [decisions: fully rebuild at LOAD time, only persist player discoveries (discovered recipes) and preferences via onSave()/onLoad() — automatic discovery when the player successfully brews a potion, detected via `onObjectAdded()` on the player inventory] —
-- [ ] P10  Guard all record lookups and database queries with `pcall`, handle missing ingredients/ESP unloads, duplicate selections, uninitialized databases, and batch startup table builds to avoid >1s freezes — ensure graceful degradation and performance —
+- [x] P10 TASK_0012 a1  Guard all record lookups and database queries with `pcall`, handle missing ingredients/ESP unloads, duplicate selections, uninitialized databases, and batch startup table builds to avoid >1s freezes — ensure graceful degradation and performance —
 
