@@ -3,7 +3,7 @@ id: TASK_AUTO_0001
 state: in_progress
 phase: done
 created_at: 2026-09-19T18:10:16.370Z
-updated_at: 2026-09-20T05:01:59.109Z
+updated_at: 2026-09-20T08:02:15.567Z
 title: Implement mod as described in TODO.md
 ---
 
@@ -29,7 +29,7 @@ A4: Automatic discovery when the player successfully brews a potion, detected vi
 - [x] P03 TASK_0005 a2  Investigate `types.Ingredient.record()` effect field names, low-level `ESM4Ingredient` mappings, complete engine handlers, and `openmw.content` LOAD capabilities — verify via console and validate against known Morrowind data —
 - [x] P04 TASK_0006 a1  Build ingredient → effects, effects → shared ingredients, and pair/triple → potion effects lookup tables, plus recipe reverse lookup and effect ID name mapping — replicate internal C++ alchemy logic in Lua —
 - [x] P05 TASK_0007 a2  Create LOAD-context script to build effect database during content load, register it via `interfaces.AlchemyHelper.queryEffects(ids)`, and document `reloadlua` limitations to handle uninitialized DB in PLAYER contexts — ensure DB is ready before scripts start — [decisions: fully rebuild at LOAD time, only persist player discoveries (discovered recipes) and preferences via onSave()/onLoad()] —
-- [ ] P06 TASK_0008 a1:failed  Create alchemy effects UI panel using openmw_aux.ui utilities layered on openmw.ui primitives — ensure pragmatic middle-ground API without MWUI template complexity — [decisions: use openmw_aux.ui utilities layered on openmw.ui primitives] —
+- [x] P06 TASK_0008 a2  Create alchemy effects UI panel using openmw_aux.ui utilities layered on openmw.ui primitives — ensure pragmatic middle-ground API without MWUI template complexity — [decisions: use openmw_aux.ui utilities layered on openmw.ui primitives] —
 - [ ] P07  Detect alchemy menu via MWUI introspection or `onActivated()` at alchemy labs and add key binding to trigger on-demand ingredient lookup against pre-built database — auto-responsive detection not required; rely on manual trigger for data — [decisions: detect the alchemy menu via MWUI introspection or the `onActivated()` event at alchemy labs (whichever proves feasible during Phase 5.1 investigation), but for retrieving ingredient IDs, rely on the **on-demand keybind (Phase 5.3) triggering a lookup against the pre-built effect database from Phase 3**] —
 - [ ] P08  Handle UI panel positioning relative to alchemy menu/screen corner and make theme/style configurable via plain Lua table — avoid custom metatables in config —
 - [ ] P09  Design save schema, implement `onSave()` and `onLoad()` handlers with version migration, and wire up automatic recipe discovery via `onObjectAdded()` on player inventory — persist only discoveries/preferences to save files — [decisions: fully rebuild at LOAD time, only persist player discoveries (discovered recipes) and preferences via onSave()/onLoad() — automatic discovery when the player successfully brews a potion, detected via `onObjectAdded()` on the player inventory] —
