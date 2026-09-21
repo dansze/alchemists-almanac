@@ -302,6 +302,14 @@ local success, err = pcall(function()
 end)
 if not success and type(logError) == 'function' then logError('sharedIngredients build: ' .. tostring(err)) end
 
+-- ── Populate init.lua's exported data tables ───────────────────────────────
+-- init.lua (GLOBAL context) cannot use openmw.content, so load-db.lua
+-- (LOAD context) builds these tables here and populates init.lua's exports.
+local init = require('scripts.alchemy-helper.init')
+init.ingredientEffects = ingredientEffects
+init.effectIngredients = effectIngredients
+init.sharedIngredients = sharedIngredients
+
 -- ── Step 8: reverse indices ────────────────────────────────────────────────
 -- effectToPairKeys[effId] = { "ing1:ing2", ... }
 -- effectToTripleKeys[effId] = { "ing1:ing2:ing3", ... }
