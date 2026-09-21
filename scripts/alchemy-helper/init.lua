@@ -65,7 +65,7 @@ local success, err = pcall(function()
                         local me = magicEffectData[effId]
                         if me and me.baseCost and me.baseCost > 0 then
                             local entry = { effId }
-                            if (me.flags and (me.flags & MGF_NO_MAGNITUDE)) == 0 then
+                            if (me.flags and bit.band(me.flags, MGF_NO_MAGNITUDE)) == 0 then
                                 local baseCost = me.baseCost
                                 local potionStrength = gmstPotionStrengthMult
                                 local minMagMult = (0.5 * potionStrength) / (gmstPotionT1MagMul * baseCost)

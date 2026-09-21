@@ -8,7 +8,8 @@ The spec's sharedIngredients regex `^[a-zA-Z0-9_]+(:[a-zA-Z0-9_]+)*$` is invalid
 luac 5.5.1 available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac`, correctly validates Lua 5.5 syntax.	TASK_0009	mu9cnbgm-qhs7wri0	lua:5.5.1
 luac available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac`, validated syntax on all three Lua files.	TASK_0012	mu9cnbgm-qhs7wri0	lua:5.5
 Lua 5.5.1 runtime available, confirmed pcall/logError/nil-guarding behavior at runtime.	TASK_0012	mu9cnbgm-qhs7wri0	lua:runtime
-luac 5.5.1 at /home/dsze/.local/share/mise/installs/lua/latest/bin/luac correctly validates Lua 5.5 syntax and rejects errors with exit code 1	TASK_0013	muaa5bcp-5omalia3	lua:luac
 Lua 5.5.1 compiler available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac`, validates all 4 committed Lua files and all 4 working-directory Lua files with zero syntax errors.	TASK_0013	muaa5bcp-5omalia3	luac
 TASK_0013's autofix changes are in working directory only (6 modified files uncommitted); no TASK_0013 commit exists in the repository — HEAD remains at TASK_0012 (`e98f1c2`).	TASK_0013	muaa5bcp-5omalia3	git-state
 This is an OpenMW mod project; `openmw.*` modules are compiled into the OpenMW binary and cannot be tested as standalone Lua packages.	TASK_0013	muaa5bcp-5omalia3	project:openmw
+luac 5.5.1 available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac`, validates Lua syntax successfully	TASK_0014	muag3jaf-5oatvz9k	lua:luac
+`.pi-tasks/` files are task infrastructure; modifications are log/cache entries appended during the run, not code changes	TASK_0014	muag3jaf-5oatvz9k	task-system:pi-tasks
