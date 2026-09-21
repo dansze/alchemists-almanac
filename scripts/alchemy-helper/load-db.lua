@@ -366,6 +366,15 @@ return {
     interfaceName = 'AlchemyHelper',
     interface = {
         queryEffects = queryEffects,
+        -- Delegate ingredient discovery to the GLOBAL script (init.lua).
+        -- Called by ingredient-detect.lua (LOCAL context) on pickup.
+        discoverIngredient = function(ingredientId)
+            -- Loaded from init.lua; the GLOBAL script handles dedup and state.
+            local init = require('scripts.alchemy-helper.init')
+            if type(init.discoverIngredient) == 'function' then
+                init.discoverIngredient(ingredientId)
+            end
+        end,
     },
     engineHandlers = {
         -- No-op onUpdate; the database is fully built above during LOAD.
