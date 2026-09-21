@@ -6,23 +6,48 @@
 --   discoverIngredient(ingredientId) called from ingredient-detect.lua.
 -- Save/load: ingredient discovery and UI preferences.
 
--- init.lua exports are populated by load-db.lua during LOAD context
--- (content package is unavailable in GLOBAL context).
-
-local ingredientEffects = {}
-local effectIngredients = {}
-local sharedIngredients = {}
-
 -- ── Persistence: discovered ingredients & preferences ──────────────────────
 -- Per-ingredient-ID tracking. Key = ingredient ID string, value = true.
-local discoveredMap = {}
 
--- User UI preferences placeholder. Plain table.
-local preferences = {}
+local db = require('scripts.alchemy-helper.load-db')
+
+-- Settings
+local interface = require('openmw.interface')
+
+interface.Settings.registerPage {
+    key = 'AlchemyHelper',
+    l10n = 'AlchemyHelper',
+    name = 'AlchemyHelper',
+    description = 'AlchemyHelper',
+}
+
+interface.Settings.registerGroup {
+    key = 'SettingsPlayerAlchemyHelper',
+    page = 'AlchemyHelper',
+    l10n = 'AlchemyHelper',
+    name = 'AlchemyHelper',
+    description = 'AlchemyHelperSettingsDesc',
+    permanentStorage = false,
+    settings = {
+        {
+            key = 'AlchemyHelperKeybind',
+            renderer = 'inputBinding',
+            name = 'AlchemyHelperKeybind',
+            description = 'AlchemyHelperKeybindDesc',
+            default = 'l',
+            argument = {
+                key = 'AlchemyHelperKeybind',
+                type = 'trigger',
+            },
+        },
+    },
+}
+
+local discoveredMap = {}
 
 --- Discover a single ingredient ID.
 --- Deduplicates (checks discoveredMap), inserts if new.
-local function discoverIngredient(ingredientId)
+function DiscoverIngredient(ingredientId)
     if not ingredientId or type(ingredientId) ~= 'string' or ingredientId == '' then
         return
     end
@@ -40,7 +65,6 @@ local function onSave()
     end
     return {
         discovered = discovered,
-        preferences = preferences,
     }
 end
 
@@ -53,21 +77,12 @@ local function onLoad(saved)
             discoveredMap[ingId] = true
         end
     end
-
-    if saved.preferences then
-        for k, v in pairs(saved.preferences) do
-            preferences[k] = v
-        end
-    end
 end
 
+
 return {
-    ingredientEffects = ingredientEffects,
-    effectIngredients = effectIngredients,
-    sharedIngredients = sharedIngredients,
-    discoverIngredient = discoverIngredient,
     engineHandlers = {
         onSave = onSave,
         onLoad = onLoad,
-    },
+    }
 }
