@@ -13,3 +13,4 @@ This is an OpenMW mod project; `openmw.*` modules are compiled into the OpenMW b
 luac 5.5.1 available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac`, validates Lua syntax successfully	TASK_0014	muag3jaf-5oatvz9k	lua:luac
 `.pi-tasks/` files are task infrastructure; modifications are log/cache entries appended during the run, not code changes	TASK_0014	muag3jaf-5oatvz9k	task-system:pi-tasks
 Available at `/home/dsze/.local/share/mise/installs/lua/latest/bin/lua`, confirmed Lua 5.5.1 runtime for simulation tests.	TASK_0015	muak3cqi-nnyzf699	lua:5.5.1
+luac 5.5.1 at `/home/dsze/.local/share/mise/installs/lua/latest/bin/luac` validates Lua syntax; rejects invalid code with exit 1.	TASK_0016	muav4els-smzco8ny	lua:syntax

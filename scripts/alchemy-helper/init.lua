@@ -4,7 +4,7 @@
 --
 -- Discovery: ingredient IDs inserted into discoveredMap via
 --   discoverIngredient(ingredientId) called from ingredient-detect.lua.
--- Save/load: version 2 schema with v1→v2 migration from legacy recipe keys.
+-- Save/load: ingredient discovery and UI preferences.
 
 local types = require('openmw.types')
 local content = require('openmw.content')
@@ -98,120 +98,6 @@ local success, err = pcall(function()
 end)
 if not success and type(logError) == 'function' then logError('effectIngredients build: ' .. tostring(err)) end
 
--- Ingredient ID list shared by pairEffects and tripleEffects builds.
-local ingredientIds = {}
-for ingId in pairs(ingredientEffects) do
-    ingredientIds[#ingredientIds + 1] = ingId
-end
-local n = #ingredientIds
-
--- Build pairEffects: maps sorted "id1:id2" to the list of shared effect IDs.
-local pairEffects = {}
-local success, err = pcall(function()
-    for i = 1, n - 1 do
-        for j = i + 1, n do
-            local a = ingredientIds[i]
-            local b = ingredientIds[j]
-            local key
-            if a < b then
-                key = a .. ':' .. b
-            else
-                key = b .. ':' .. a
-            end
-            local effectsA = ingredientEffects[a]
-            local effectsB = ingredientEffects[b]
-            local result = {}
-            for _, effA in ipairs(effectsA) do
-                local idA = effA[1]
-                for _, effB in ipairs(effectsB) do
-                    if effB[1] == idA then
-                        result[#result + 1] = idA
-                        break
-                    end
-                end
-            end
-            if #result > 0 then
-                pairEffects[key] = result
-            end
-        end
-    end
-end)
-if not success and type(logError) == 'function' then logError('pairEffects build: ' .. tostring(err)) end
-
--- Build tripleEffects: maps sorted "id1:id2:id3" to the list of shared effect IDs.
-local tripleEffects = {}
-local success, err = pcall(function()
-    for i = 1, n - 2 do
-        for j = i + 1, n - 1 do
-            for k = j + 1, n do
-                local a = ingredientIds[i]
-                local b = ingredientIds[j]
-                local c = ingredientIds[k]
-                if a > b or b > c or a > c then
-                    if a > b then a, b = b, a end
-                    if b > c then b, c = c, b end
-                    if a > b then a, b = b, a end
-                end
-                local key = a .. ':' .. b .. ':' .. c
-                local effectsA = ingredientEffects[a]
-                local effectsB = ingredientEffects[b]
-                local effectsC = ingredientEffects[c]
-                local result = {}
-                local seen = {}
-                for _, effA in ipairs(effectsA) do
-                    for _, effB in ipairs(effectsB) do
-                        if effB[1] == effA[1] then
-                            if not seen[effA[1]] then
-                                seen[effA[1]] = true
-                                result[#result + 1] = effA[1]
-                            end
-                            break
-                        end
-                    end
-                end
-                for _, effA in ipairs(effectsA) do
-                    for _, effC in ipairs(effectsC) do
-                        if effC[1] == effA[1] then
-                            if not seen[effA[1]] then
-                                seen[effA[1]] = true
-                                result[#result + 1] = effA[1]
-                            end
-                            break
-                        end
-                    end
-                end
-                for _, effB in ipairs(effectsB) do
-                    for _, effC in ipairs(effectsC) do
-                        if effC[1] == effB[1] then
-                            if not seen[effB[1]] then
-                                seen[effB[1]] = true
-                                result[#result + 1] = effB[1]
-                            end
-                            break
-                        end
-                    end
-                end
-                if #result > 0 then
-                    tripleEffects[key] = result
-                end
-            end
-        end
-    end
-end)
-if not success and type(logError) == 'function' then logError('tripleEffects build: ' .. tostring(err)) end
-
--- Build recipeEffects: maps any ingredient set key to its predicted effects.
-local recipeEffects = {}
-local success, err = pcall(function()
-    for key, effs in pairs(pairEffects) do
-        recipeEffects[key] = effs
-    end
-    for key, effs in pairs(tripleEffects) do
-        recipeEffects[key] = effs
-    end
-end)
-if not success and type(logError) == 'function' then logError('recipeEffects build: ' .. tostring(err)) end
-
 -- Build sharedIngredients: maps effect key to ingredient providing all listed effects.
 local sharedIngredients = {}
 local success, err = pcall(function()
@@ -264,58 +150,28 @@ local function discoverIngredient(ingredientId)
     discoveredMap[ingredientId] = true
 end
 
---- onSave handler: serialize discoveredMap into versioned schema.
---- Returns { version = 2, discovered = { "ingId1", ... }, preferences = {} }
+--- onSave handler: serialize discoveredMap and preferences.
 local function onSave()
     local discovered = {}
     for ingId in pairs(discoveredMap) do
         discovered[#discovered + 1] = ingId
     end
     return {
-        version = 2,
         discovered = discovered,
         preferences = preferences,
     }
 end
 
---- onLoad handler: deserialize, migrate v1→v2, restore.
+--- onLoad handler: deserialize discovered ingredients and preferences.
 local function onLoad(saved)
     if not saved then return end
 
-    local version = saved.version
-    if version == 1 then
-        -- Migration: legacy recipe keys are colon-separated ingredient IDs.
-        -- Split each key and insert individual ingredient IDs into discoveredMap.
-        if saved.discovered then
-            for _, key in ipairs(saved.discovered) do
-                for part in string.gmatch(key, '[^:]+') do
-                    discoveredMap[part] = true
-                end
-            end
-        end
-        -- Restore preferences.
-        if saved.preferences then
-            for k, v in pairs(saved.preferences) do
-                preferences[k] = v
-            end
-        end
-        return
-    elseif version == 2 then
-        -- Current format: ingredient IDs stored directly.
-        -- No migration needed; fall through to restore.
-    else
-        -- Unknown version — reject silently.
-        return
-    end
-
-    -- Restore discovered ingredients (v2: ingredient IDs stored directly).
     if saved.discovered then
         for _, ingId in ipairs(saved.discovered) do
             discoveredMap[ingId] = true
         end
     end
 
-    -- Restore preferences.
     if saved.preferences then
         for k, v in pairs(saved.preferences) do
             preferences[k] = v
@@ -326,9 +182,6 @@ end
 return {
     ingredientEffects = ingredientEffects,
     effectIngredients = effectIngredients,
-    pairEffects = pairEffects,
-    tripleEffects = tripleEffects,
-    recipeEffects = recipeEffects,
     sharedIngredients = sharedIngredients,
     effectNames = effectNames,
     discoverIngredient = discoverIngredient,
