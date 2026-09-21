@@ -9,8 +9,6 @@
 -- ── Persistence: discovered ingredients & preferences ──────────────────────
 -- Per-ingredient-ID tracking. Key = ingredient ID string, value = true.
 
-local db = require('scripts.alchemy-helper.load-db')
-
 -- Settings
 local interface = require('openmw.interface')
 
@@ -43,24 +41,10 @@ interface.Settings.registerGroup {
     },
 }
 
-local discoveredMap = {}
-
---- Discover a single ingredient ID.
---- Deduplicates (checks discoveredMap), inserts if new.
-function DiscoverIngredient(ingredientId)
-    if not ingredientId or type(ingredientId) ~= 'string' or ingredientId == '' then
-        return
-    end
-    if discoveredMap[ingredientId] then
-        return
-    end
-    discoveredMap[ingredientId] = true
-end
-
 --- onSave handler: serialize discoveredMap and preferences.
 local function onSave()
     local discovered = {}
-    for ingId in pairs(discoveredMap) do
+    for ingId in pairs(DiscoveredMap) do
         discovered[#discovered + 1] = ingId
     end
     return {
@@ -74,7 +58,7 @@ local function onLoad(saved)
 
     if saved.discovered then
         for _, ingId in ipairs(saved.discovered) do
-            discoveredMap[ingId] = true
+            DiscoveredMap[ingId] = true
         end
     end
 end

@@ -8,11 +8,9 @@
 
 local core = require('openmw.core')
 local interfaces = require('openmw.interfaces')
-local types = require('openmw.types')
+local ui = require('openmw.ui')
 
--- Lookup tables from init.lua (ingredient-only).
-local lookupTables = require('scripts.alchemy-helper.init')
-local ingredientEffects = lookupTables.ingredientEffects or {}
+local ingredients = require('alchemy-helper.shared.ingredients')
 
 -- ---------------------------------------------------------------------------
 -- Configuration — plain Lua table, no metatables, no classes.
@@ -51,12 +49,10 @@ local CONFIG = {
 local function getScreenSize()
     local width = 1920
     local height = 1080
-    if _G.openmw and _G.openmw.core then
-        local s = _G.openmw.core.screen
-        if type(s) == 'table' and s.width and s.height then
-            width = s.width
-            height = s.height
-        end
+    local s = core.screen
+    if type(s) == 'table' and s.width and s.height then
+        width = s.width
+        height = s.height
     end
     return width, height
 end
@@ -133,12 +129,12 @@ local panelState = {
 -- confirmed.
 -- ---------------------------------------------------------------------------
 
--- Build the panel layout table for openmw.ui.create().
+-- Build the panel layout table for ui.create().
 local function buildPanelLayout()
-    -- TODO: confirm exact openmw.ui.create signature and TYPE constants
-    -- Expected structure: { type = openmw.ui.TYPE.Window, props = { ... }, content = { ... } }
+    -- TODO: confirm exact ui.create signature and TYPE constants
+    -- Expected structure: { type = ui.TYPE.Window, props = { ... }, content = { ... } }
     return {
-        type = openmw.ui.TYPE and openmw.ui.TYPE.Window or 'Window',
+        type = ui.TYPE and ui.TYPE.Window or 'Window',
         props = {
             x = 100,
             y = 100,
@@ -147,21 +143,21 @@ local function buildPanelLayout()
             -- TODO: confirm if titlebar is a prop or requires a separate widget
         },
         content = {
-            type = openmw.ui.TYPE and openmw.ui.TYPE.VerticalLayout or 'VerticalLayout',
+            type = ui.TYPE and ui.TYPE.VerticalLayout or 'VerticalLayout',
             props = {
                 padding = 5,
             },
             content = {
                 -- Title bar row
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.HorizontalLayout or 'HorizontalLayout',
+                    type = ui.TYPE and ui.TYPE.HorizontalLayout or 'HorizontalLayout',
                     props = {
                         padding = 5,
                     },
                     content = {
                         -- Title label
                         {
-                            type = openmw.ui.TYPE and openmw.ui.TYPE.Label or 'Label',
+                            type = ui.TYPE and ui.TYPE.Label or 'Label',
                             props = {
                                 text = 'Alchemy Effects',
                                 fontSize = 16,
@@ -169,14 +165,14 @@ local function buildPanelLayout()
                         },
                         -- Spacer
                         {
-                            type = openmw.ui.TYPE and openmw.ui.TYPE.Spacer or 'Spacer',
+                            type = ui.TYPE and ui.TYPE.Spacer or 'Spacer',
                             props = {
                                 expand = true,
                             },
                         },
                         -- Close button (btnClose)
                         {
-                            type = openmw.ui.TYPE and openmw.ui.TYPE.Button or 'Button',
+                            type = ui.TYPE and ui.TYPE.Button or 'Button',
                             props = {
                                 text = '\x2716',  -- close symbol
                                 width = 30,
@@ -191,14 +187,14 @@ local function buildPanelLayout()
                 },
                 -- Scrollable content area
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.ScrollArea or 'ScrollArea',
+                    type = ui.TYPE and ui.TYPE.ScrollArea or 'ScrollArea',
                     props = {
                         expand = true,
                     },
                     content = {
                         -- Content container for effect detail blocks
                         {
-                            type = openmw.ui.TYPE and openmw.ui.TYPE.VerticalLayout or 'VerticalLayout',
+                            type = ui.TYPE and ui.TYPE.VerticalLayout or 'VerticalLayout',
                             props = {
                                 padding = 5,
                             },
@@ -211,17 +207,17 @@ local function buildPanelLayout()
     }
 end
 
--- Create (or reuse) the main panel widget via openmw.ui.
+-- Create (or reuse) the main panel widget via ui.
 -- Sets panelState.panel and panelState.contentPanel.
 local function createPanel()
     if panelState.panel then
         return panelState.panel
     end
-    -- TODO: confirm the exact openmw.ui.create() call and return value
+    -- TODO: confirm the exact ui.create() call and return value
     -- openmw_aux.ui may provide helper: openmw_aux.ui.createWindow(...)
     local layout = applyConfigToLayout(buildPanelLayout(), CONFIG)
-    local panel = openmw.ui.create and openmw.ui.create(layout)
-    -- Fallback stub if openmw.ui.create is not available:
+    local panel = ui.create and ui.create(layout)
+    -- Fallback stub if ui.create is not available:
     -- panel = openmw_aux.ui.createWindow and openmw_aux.ui.createWindow('AlchemyEffects')
     if not panel then
         panel = { _stub = true }
@@ -250,7 +246,7 @@ local function populateEffects(panel, contentArea, effects)
     end
 
     if not effects or #effects == 0 then
-        -- TODO: add a "no effects" label via openmw.ui.TYPE.Label
+        -- TODO: add a "no effects" label via ui.TYPE.Label
         return
     end
 
@@ -260,7 +256,7 @@ local function populateEffects(panel, contentArea, effects)
 
         -- Build a detail block for this effect
         local block = {
-            type = openmw.ui.TYPE and openmw.ui.TYPE.VerticalLayout or 'VerticalLayout',
+            type = ui.TYPE and ui.TYPE.VerticalLayout or 'VerticalLayout',
             props = {
                 padding = 5,
                 margin = 2,
@@ -268,7 +264,7 @@ local function populateEffects(panel, contentArea, effects)
             content = {
                 -- Effect name header
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.Label or 'Label',
+                    type = ui.TYPE and ui.TYPE.Label or 'Label',
                     props = {
                         text = effName or effId,
                         fontSize = 14,
@@ -277,7 +273,7 @@ local function populateEffects(panel, contentArea, effects)
                 },
                 -- Matching ingredients list
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.Label or 'Label',
+                    type = ui.TYPE and ui.TYPE.Label or 'Label',
                     props = {
                         text = 'Ingredients: ' .. (effData.ingredients and table.concat(effData.ingredients, ', ') or '—'),
                         fontSize = 11,
@@ -285,7 +281,7 @@ local function populateEffects(panel, contentArea, effects)
                 },
                 -- Shared ingredient note
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.Label or 'Label',
+                    type = ui.TYPE and ui.TYPE.Label or 'Label',
                     props = {
                         text = 'Shared ingredient: ' .. (effData.sharedIngredient or '—'),
                         fontSize = 11,
@@ -293,7 +289,7 @@ local function populateEffects(panel, contentArea, effects)
                 },
                 -- Pair usage info
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.Label or 'Label',
+                    type = ui.TYPE and ui.TYPE.Label or 'Label',
                     props = {
                         text = 'Pairs: ' .. (effData.pairs and #effData.pairs > 0
                             and table.concat(effData.pairs, ', ')
@@ -303,7 +299,7 @@ local function populateEffects(panel, contentArea, effects)
                 },
                 -- Triple usage info
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.Label or 'Label',
+                    type = ui.TYPE and ui.TYPE.Label or 'Label',
                     props = {
                         text = 'Triples: ' .. (effData.triples and #effData.triples > 0
                             and table.concat(effData.triples, ', ')
@@ -313,7 +309,7 @@ local function populateEffects(panel, contentArea, effects)
                 },
                 -- Recipe links
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.Label or 'Label',
+                    type = ui.TYPE and ui.TYPE.Label or 'Label',
                     props = {
                         text = 'Recipes: ' .. (effData.recipes and #effData.recipes > 0
                             and table.concat(effData.recipes, ', ')
@@ -323,7 +319,7 @@ local function populateEffects(panel, contentArea, effects)
                 },
                 -- Separator line
                 {
-                    type = openmw.ui.TYPE and openmw.ui.TYPE.Separator or 'Separator',
+                    type = ui.TYPE and ui.TYPE.Separator or 'Separator',
                     props = {},
                 },
             },
@@ -338,7 +334,7 @@ end
 
 -- Resolve an ingredient ID to a list of effect IDs using init.lua lookup tables.
 local function resolveIngredientEffects(ingredientId)
-    local effList = ingredientEffects[ingredientId]
+    local effList = ingredients.ingredientEffects[ingredientId]
     if not effList then
         return {}
     end
@@ -350,48 +346,6 @@ local function resolveIngredientEffects(ingredientId)
     return result
 end
 
--- Resolve a potion ID to a list of ingredient IDs via the game's record system,
--- then resolve those ingredient IDs to effect IDs.
-local function resolvePotionEffects(potionId)
-    -- Potion records expose an "effects" field via types.Potion.record().
-    -- TODO: confirm types.Potion.record(id) returns the expected structure.
-    local potionRecord = types.Potion and types.Potion.record(potionId)
-    if not potionRecord then
-        return {}
-    end
-
-    -- Collect all ingredient IDs referenced by the potion's effects.
-    local ingredientIds = {}
-    local seen = {}
-    if potionRecord.effects then
-        for _, eff in ipairs(potionRecord.effects) do
-            if eff and eff.ingredient then
-                local ingId = eff.ingredient
-                if not seen[ingId] then
-                    seen[ingId] = true
-                    ingredientIds[#ingredientIds + 1] = ingId
-                end
-            end
-        end
-    end
-
-    -- Resolve each ingredient ID to its effect IDs.
-    local effectIds = {}
-    local effectSeen = {}
-    for _, ingId in ipairs(ingredientIds) do
-        local effList = ingredientEffects[ingId]
-        if effList then
-            for _, entry in ipairs(effList) do
-                local effId = entry[1]
-                if not effectSeen[effId] then
-                    effectSeen[effId] = true
-                    effectIds[#effectIds + 1] = effId
-                end
-            end
-        end
-    end
-    return effectIds
-end
 
 -- Resolve a single string ID to effect IDs.
 -- Ingredient IDs come from init.lua lookup tables.
@@ -402,16 +356,9 @@ local function resolveIdToEffectIds(id)
     end
 
     -- Try ingredient lookup first (from init.lua tables).
-    if ingredientEffects[id] then
+    if ingredients.ingredientEffects[id] then
         return resolveIngredientEffects(id)
     end
-
-    -- Fall back to potion record system.
-    local potionRecord = types.Potion and types.Potion.record(id)
-    if potionRecord then
-        return resolvePotionEffects(id)
-    end
-
     -- ID not recognized as ingredient or potion.
     return {}
 end
@@ -469,8 +416,8 @@ function AlchemyUI.show()
     if not panelState.panel then
         AlchemyUI.create()
     end
-    -- TODO: openmw.ui.show(panel) or equivalent
-    -- panel = openmw.ui.show and openmw.ui.show(panelState.panel)
+    -- TODO: ui.show(panel) or equivalent
+    -- panel = ui.show and ui.show(panelState.panel)
     -- panel = openmw_aux.ui.show and openmw_aux.ui.show(panel)
     panelState.visible = true
 end
@@ -480,8 +427,8 @@ function AlchemyUI.hide()
     if not panelState.visible then
         return
     end
-    -- TODO: openmw.ui.hide(panel) or equivalent
-    -- openmw.ui.hide and openmw.ui.hide(panelState.panel)
+    -- TODO: ui.hide(panel) or equivalent
+    -- ui.hide and ui.hide(panelState.panel)
     -- openmw_aux.ui.hide and openmw_aux.ui.hide(panelState.panel)
     panelState.visible = false
 end
@@ -492,8 +439,8 @@ function AlchemyUI.destroy()
     if not panelState.panel then
         return
     end
-    -- TODO: openmw.ui.destroy(panel) or equivalent
-    -- openmw.ui.destroy and openmw.ui.destroy(panelState.panel)
+    -- TODO: ui.destroy(panel) or equivalent
+    -- ui.destroy and ui.destroy(panelState.panel)
     -- openmw_aux.ui.destroy and openmw_aux.ui.destroy(panelState.panel)
     panelState.panel = nil
     panelState.visible = false
@@ -532,7 +479,7 @@ function AlchemyUI.update(id)
     local formattedEffects = queryAndFormatEffects(effectIds)
 
     -- Populate content.
-    -- TODO: openmw_aux.ui.refresh or openmw.ui.update to repaint contentPanel
+    -- TODO: openmw_aux.ui.refresh or ui.update to repaint contentPanel
     if panelState.contentPanel then
         populateEffects(panelState.panel, panelState.contentPanel, formattedEffects)
     end

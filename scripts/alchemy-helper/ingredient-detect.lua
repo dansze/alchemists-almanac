@@ -5,6 +5,7 @@
 -- `interfaces.AlchemyHelper.discoverIngredient(ingredientId)`.
 
 local content = require('openmw.content')
+local ingredients = require('alchemy-helper.shared.ingredients')
 
 local function logError(msg)
     if type(print) == 'function' then
@@ -46,13 +47,11 @@ local function onObjectAdded(object)
     if not ingredientId then return end
 
     -- Report to the GLOBAL script via the interface.
-    if interfaces.AlchemyHelper and interfaces.AlchemyHelper.discoverIngredient then
-        local ok, err = pcall(function()
-            interfaces.AlchemyHelper.discoverIngredient(ingredientId)
-        end)
-        if not ok and type(logError) == 'function' then
-            logError('discoverIngredient failed: ' .. tostring(err))
-        end
+    local ok, err = pcall(function()
+        ingredients.discoverIngredient(ingredientId)
+    end)
+    if not ok and type(logError) == 'function' then
+        logError('discoverIngredient failed: ' .. tostring(err))
     end
 end
 

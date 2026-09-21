@@ -17,6 +17,7 @@
 -- (world not initialized in LOAD). No prohibited ops.
 
 local content = require('openmw.content')
+local ingredients = require('scripts.alchemy-helper.shared.ingredients')
 
 -- ── Settings registration (AlchemyHelper keybind) ──────────────────────────
 -- Registered once per LOAD; idempotent.  Value is read by alchemy-binding.lua
@@ -36,7 +37,6 @@ local MGF_NO_MAGNITUDE = 8
 
 -- ── Step 2: ingredientEffects ──────────────────────────────────────────────
 -- ingredientEffects[ingId] = { {effId, minMagMult?, maxMagMult?}, ... }
-local ingredientEffects = {}
 local success, err = pcall(function()
     for _, ing in ipairs(content.ingredients.records) do
         if ing and ing.id and ing.id ~= '' then
@@ -56,7 +56,7 @@ local success, err = pcall(function()
                     end
                 end
             end
-            ingredientEffects[ing.id] = effList
+            ingredients.ingredientEffects[ing.id] = effList
         end
     end
 end)
@@ -64,15 +64,14 @@ if not success and type(logError) == 'function' then logError('ingredientEffects
 
 -- ── Step 3: effectIngredients ──────────────────────────────────────────────
 -- effectIngredients[effId] = { ingId1, ingId2, ... }
-local effectIngredients = {}
 local success, err = pcall(function()
-    for ingId, effList in pairs(ingredientEffects) do
+    for ingId, effList in pairs(ingredients.ingredientEffects) do
         for _, eff in ipairs(effList) do
             local effId = eff
-            if not effectIngredients[effId] then
-                effectIngredients[effId] = {}
+            if not  ingredients.effectIngredients[effId] then
+                 ingredients.effectIngredients[effId] = {}
             end
-            local entries = effectIngredients[effId]
+            local entries =  ingredients.effectIngredients[effId]
             entries[#entries + 1] = ingId
         end
     end
