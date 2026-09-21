@@ -12,12 +12,44 @@ local storage = require('openmw.storage')
 local SETTINGS_GROUP = 'SettingsPlayerAlchemyHelper'
 local SETTINGS_KEY   = 'AlchemyHelperKeybind'
 
+-- Settings
+local interface = require('openmw.interfaces')
+
+interface.Settings.registerPage {
+    key = 'AlchemyHelper',
+    l10n = 'AlchemyHelper',
+    name = 'Alchemist\'s Almanac',
+    description = 'AlchemyHelper',
+}
+
+interface.Settings.registerGroup {
+    key = SETTINGS_GROUP,
+    page = 'AlchemyHelper',
+    l10n = 'AlchemyHelper',
+    name = 'AlchemyHelper',
+    description = 'AlchemyHelperSettingsDesc',
+    permanentStorage = false,
+    settings = {
+        {
+            key = SETTINGS_KEY,
+            renderer = 'inputBinding',
+            name = 'Almanac Keybind',
+            description = 'Keybind to open the almanac.',
+            default = '\\',
+            argument = {
+                key = SETTINGS_KEY,
+                type = 'trigger',
+            },
+        },
+    },
+}
+
 --- Read the current keybind from the Settings group registered via
 --- openmw.interfaces.Settings.  Returns 'l' when the setting is unset.
 local function getAlchemyHelperKeybind()
     local section = storage.playerSection(SETTINGS_GROUP)
     local value = section and section:get(SETTINGS_KEY)
-    return value or 'l'
+    return value or '\\'
 end
 
 local function logError(msg)

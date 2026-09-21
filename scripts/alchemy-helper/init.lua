@@ -9,42 +9,12 @@
 -- ── Persistence: discovered ingredients & preferences ──────────────────────
 -- Per-ingredient-ID tracking. Key = ingredient ID string, value = true.
 
--- Settings
-local interface = require('openmw.interface')
-
-interface.Settings.registerPage {
-    key = 'AlchemyHelper',
-    l10n = 'AlchemyHelper',
-    name = 'AlchemyHelper',
-    description = 'AlchemyHelper',
-}
-
-interface.Settings.registerGroup {
-    key = 'SettingsPlayerAlchemyHelper',
-    page = 'AlchemyHelper',
-    l10n = 'AlchemyHelper',
-    name = 'AlchemyHelper',
-    description = 'AlchemyHelperSettingsDesc',
-    permanentStorage = false,
-    settings = {
-        {
-            key = 'AlchemyHelperKeybind',
-            renderer = 'inputBinding',
-            name = 'AlchemyHelperKeybind',
-            description = 'AlchemyHelperKeybindDesc',
-            default = 'l',
-            argument = {
-                key = 'AlchemyHelperKeybind',
-                type = 'trigger',
-            },
-        },
-    },
-}
+local ingredients = require('scripts.alchemy-helper.shared.ingredients')
 
 --- onSave handler: serialize discoveredMap and preferences.
 local function onSave()
     local discovered = {}
-    for ingId in pairs(DiscoveredMap) do
+    for ingId in pairs(ingredients.discoveredIngredients) do
         discovered[#discovered + 1] = ingId
     end
     return {
@@ -58,7 +28,7 @@ local function onLoad(saved)
 
     if saved.discovered then
         for _, ingId in ipairs(saved.discovered) do
-            DiscoveredMap[ingId] = true
+            ingredients.discoveredIngredients[ingId] = true
         end
     end
 end

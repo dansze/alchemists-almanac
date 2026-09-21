@@ -5,7 +5,7 @@
 -- `interfaces.AlchemyHelper.discoverIngredient(ingredientId)`.
 
 local content = require('openmw.content')
-local ingredients = require('alchemy-helper.shared.ingredients')
+local ingredients = require('scripts.alchemy-helper.shared.ingredients')
 
 local function logError(msg)
     if type(print) == 'function' then

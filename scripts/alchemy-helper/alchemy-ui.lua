@@ -10,7 +10,7 @@ local core = require('openmw.core')
 local interfaces = require('openmw.interfaces')
 local ui = require('openmw.ui')
 
-local ingredients = require('alchemy-helper.shared.ingredients')
+local ingredients = require('scripts.alchemy-helper.shared.ingredients')
 
 -- ---------------------------------------------------------------------------
 -- Configuration — plain Lua table, no metatables, no classes.
