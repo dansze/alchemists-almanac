@@ -5,19 +5,27 @@
 -- no caching — so in-game rebinding takes effect immediately.
 -- Falls back to 'l' when no custom value is stored.
 
-local interfaces = require('openmw.interfaces')
-local storage = require('openmw.storage')
+local input = require('openmw.input')
+local alchemyUI = require('alchemy-ui')
+local interface = require('openmw.interfaces')
+local ui = require('openmw.ui')
 
 -- Settings group / field keys (must match load-db.lua registration).
 local SETTINGS_GROUP = 'SettingsPlayerAlchemyHelper'
-local SETTINGS_KEY   = 'AlchemyHelperKeybind'
+local SETTINGS_KEY   = 'AlchemyHelperKeyBind'
+local SETTINGS_ACTION = 'AlchemyHelperKey'
 
 -- Settings
-local interface = require('openmw.interfaces')
+input.registerAction {
+    key = SETTINGS_ACTION,
+    type = input.ACTION_TYPE.Boolean,
+    name = '',
+    description = '',
+    defaultValue = false,
+}
 
 interface.Settings.registerPage {
     key = 'AlchemyHelper',
-    l10n = 'AlchemyHelper',
     name = 'Alchemist\'s Almanac',
     description = 'AlchemyHelper',
 }
@@ -25,7 +33,6 @@ interface.Settings.registerPage {
 interface.Settings.registerGroup {
     key = SETTINGS_GROUP,
     page = 'AlchemyHelper',
-    l10n = 'AlchemyHelper',
     name = 'AlchemyHelper',
     description = 'AlchemyHelperSettingsDesc',
     permanentStorage = false,
@@ -35,58 +42,28 @@ interface.Settings.registerGroup {
             renderer = 'inputBinding',
             name = 'Almanac Keybind',
             description = 'Keybind to open the almanac.',
-            default = '\\',
+            default = input.KEY.BackSlash,
             argument = {
-                key = SETTINGS_KEY,
-                type = 'trigger',
+                key = SETTINGS_ACTION,
+                type = 'action',
             },
         },
     },
 }
 
---- Read the current keybind from the Settings group registered via
---- openmw.interfaces.Settings.  Returns 'l' when the setting is unset.
-local function getAlchemyHelperKeybind()
-    local section = storage.playerSection(SETTINGS_GROUP)
-    local value = section and section:get(SETTINGS_KEY)
-    return value or '\\'
-end
+ui.showMessage('Settings and binding loaded!')
 
-local function logError(msg)
-    if type(print) == 'function' then
-        print('[AlchemyHelper] ' .. tostring(msg))
+local showing = false
+local function handleUI(val)
+    if ~val then return end
+    if ~showing then
+        alchemyUI.show()
+    else
+        alchemyUI.hide()
     end
 end
 
-local AlchemyUI = nil
-local success, err = pcall(function()
-    AlchemyUI = require('alchemy-ui')
-end)
-if not success and type(logError) == 'function' then logError('require alchemy-ui: ' .. tostring(err)) end
+input.registerActionHandler(SETTINGS_ACTION, handleUI)
 
 return {
-    engineHandlers = {
-        onKeyPress = function(key)
-            if key ~= getAlchemyHelperKeybind() then return end
-
-            -- Guard: effect database not loaded yet, or reloadlua without init.
-            if not interfaces.AlchemyHelper or not interfaces.AlchemyHelper.queryEffects then
-                if AlchemyUI then AlchemyUI.update() end
-                return
-            end
-
-            local id = nil
-            local success, err = pcall(function()
-                id = interfaces.AlchemyHelper.ingredientId()
-            end)
-            if not success and type(logError) == 'function' then logError('ingredientId: ' .. tostring(err)) end
-
-            if not id or type(id) ~= 'string' or id == '' then
-                if AlchemyUI then AlchemyUI.update() end
-                return
-            end
-
-            if AlchemyUI then AlchemyUI.update(id) end
-        end,
-    },
 }
