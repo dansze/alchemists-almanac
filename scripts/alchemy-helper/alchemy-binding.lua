@@ -6,7 +6,7 @@
 -- Falls back to 'l' when no custom value is stored.
 
 local input = require('openmw.input')
-local alchemyUI = require('alchemy-ui')
+local alchemyUI = require('scripts.alchemy-helper.alchemy-ui')
 local interface = require('openmw.interfaces')
 local ui = require('openmw.ui')
 
@@ -20,29 +20,32 @@ input.registerAction {
     key = SETTINGS_ACTION,
     type = input.ACTION_TYPE.Boolean,
     name = '',
+    l10n = 'AlchemyHelper',
     description = '',
     defaultValue = false,
 }
 
 interface.Settings.registerPage {
     key = 'AlchemyHelper',
+    l10n = 'AlchemyHelper',
     name = 'Alchemist\'s Almanac',
     description = 'AlchemyHelper',
 }
 
 interface.Settings.registerGroup {
     key = SETTINGS_GROUP,
+    l10n = 'AlchemyHelper',
     page = 'AlchemyHelper',
     name = 'AlchemyHelper',
     description = 'AlchemyHelperSettingsDesc',
-    permanentStorage = false,
+    permanentStorage = true,
     settings = {
         {
             key = SETTINGS_KEY,
             renderer = 'inputBinding',
             name = 'Almanac Keybind',
             description = 'Keybind to open the almanac.',
-            default = input.KEY.BackSlash,
+            default = '',
             argument = {
                 key = SETTINGS_ACTION,
                 type = 'action',
@@ -51,12 +54,10 @@ interface.Settings.registerGroup {
     },
 }
 
-ui.showMessage('Settings and binding loaded!')
-
 local showing = false
 local function handleUI(val)
-    if ~val then return end
-    if ~showing then
+    if not val then return end
+    if not showing then
         alchemyUI.show()
     else
         alchemyUI.hide()

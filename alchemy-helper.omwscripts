@@ -12,7 +12,7 @@
 #
 # Target: OpenMW 0.50+
 
-GLOBAL: scripts/alchemy-helper/init.lua
-LOAD:   scripts/alchemy-helper/load-db.lua
-LOCAL:  scripts/alchemy-helper/ingredient-detect.lua
-PLAYER: scripts/alchemy-helper/alchemy-binding.lua
+GLOBAL:                       scripts/alchemy-helper/init.lua
+LOAD:                         scripts/alchemy-helper/load-db.lua
+PLAYER:                       scripts/alchemy-helper/alchemy-binding.lua
+NPC CREATURE CONTAINER INGREDIENT: scripts/alchemy-helper/ingredient-detect.lua

@@ -9,7 +9,7 @@
 -- ── Persistence: discovered ingredients & preferences ──────────────────────
 -- Per-ingredient-ID tracking. Key = ingredient ID string, value = true.
 
-local ingredients = require('scripts.alchemy-helper.shared.ingredients')
+local ingredients = require('scripts.alchemy-helper.shared.db')
 
 --- onSave handler: serialize discoveredMap and preferences.
 local function onSave()

@@ -10,7 +10,7 @@ local core = require('openmw.core')
 local interfaces = require('openmw.interfaces')
 local ui = require('openmw.ui')
 
-local ingredients = require('scripts.alchemy-helper.shared.ingredients')
+local db = require('scripts.alchemy-helper.shared.db')
 
 -- ---------------------------------------------------------------------------
 -- Configuration — plain Lua table, no metatables, no classes.
@@ -334,7 +334,7 @@ end
 
 -- Resolve an ingredient ID to a list of effect IDs using init.lua lookup tables.
 local function resolveIngredientEffects(ingredientId)
-    local effList = ingredients.ingredientEffects[ingredientId]
+    local effList = db.ingredientEffects[ingredientId]
     if not effList then
         return {}
     end
@@ -356,7 +356,7 @@ local function resolveIdToEffectIds(id)
     end
 
     -- Try ingredient lookup first (from init.lua tables).
-    if ingredients.ingredientEffects[id] then
+    if db.ingredientEffects[id] then
         return resolveIngredientEffects(id)
     end
     -- ID not recognized as ingredient or potion.

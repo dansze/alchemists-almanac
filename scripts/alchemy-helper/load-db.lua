@@ -17,11 +17,7 @@
 -- (world not initialized in LOAD). No prohibited ops.
 
 local content = require('openmw.content')
-local ingredients = require('scripts.alchemy-helper.shared.ingredients')
-
--- ── Settings registration (AlchemyHelper keybind) ──────────────────────────
--- Registered once per LOAD; idempotent.  Value is read by alchemy-binding.lua
--- via openmw.storage on each onKeyPress invocation.
+local db = require('scripts.alchemy-helper.shared.db')
 
 local function logError(msg)
     if type(print) == 'function' then
@@ -29,57 +25,51 @@ local function logError(msg)
     end
 end
 
--- ponytail: build happens once per LOAD; if it ever exceeds 1s we can
---           add incremental caching with a generation counter.
+local function loadDB()
 
--- MagicEffect NoMagnitude flag bitmask (same as init.lua for consistency).
-local MGF_NO_MAGNITUDE = 8
-
--- ── Step 2: ingredientEffects ──────────────────────────────────────────────
--- ingredientEffects[ingId] = { {effId, minMagMult?, maxMagMult?}, ... }
-local success, err = pcall(function()
-    for _, ing in ipairs(content.ingredients.records) do
-        if ing and ing.id and ing.id ~= '' then
-            local effList = {}
-            if ing.effects then
-                for _, eff in ipairs(ing.effects) do
-                    local effId = eff and eff.id
-                    if effId and effId ~= '' then
-                        local entry = effId
-                        if eff.affectedAttribute then
-                            entry = entry .. eff.affectedAttribute
+    local success, err = pcall(function()
+        for _, ing in ipairs(content.ingredients.records) do
+            if ing and ing.id and ing.id ~= '' then
+                local effList = {}
+                if ing.effects then
+                    for _, eff in ipairs(ing.effects) do
+                        local effId = eff and eff.id
+                        if effId and effId ~= '' then
+                            local entry = effId
+                            if eff.affectedAttribute then
+                                entry = entry .. eff.affectedAttribute
+                            end
+                            if eff.affectedSkill then
+                                entry = entry .. eff.affectedSkill
+                            end
+                            effList[#effList + 1] = entry
                         end
-                        if eff.affectedSkill then
-                            entry = entry .. eff.affectedSkill
-                        end
-                        effList[#effList + 1] = entry
                     end
                 end
+                db.ingredientEffects[ing.id] = effList
             end
-            ingredients.ingredientEffects[ing.id] = effList
         end
-    end
-end)
-if not success and type(logError) == 'function' then logError('ingredientEffects build: ' .. tostring(err)) end
+    end)
+    if not success and type(logError) == 'function' then logError('ingredientEffects build: ' .. tostring(err)) end
 
--- ── Step 3: effectIngredients ──────────────────────────────────────────────
--- effectIngredients[effId] = { ingId1, ingId2, ... }
-local success, err = pcall(function()
-    for ingId, effList in pairs(ingredients.ingredientEffects) do
-        for _, eff in ipairs(effList) do
-            local effId = eff
-            if not  ingredients.effectIngredients[effId] then
-                 ingredients.effectIngredients[effId] = {}
+    local success, err = pcall(function()
+        for ingId, effList in pairs(db.ingredientEffects) do
+            for _, eff in ipairs(effList) do
+                local effId = eff
+                if not  db.effectIngredients[effId] then
+                    db.effectIngredients[effId] = {}
+                end
+                local entries =  db.effectIngredients[effId]
+                entries[#entries + 1] = ingId
             end
-            local entries =  ingredients.effectIngredients[effId]
-            entries[#entries + 1] = ingId
         end
-    end
-end)
-if not success and type(logError) == 'function' then logError('effectIngredients build: ' .. tostring(err)) end
+    end)
+    if not success and type(logError) == 'function' then logError('effectIngredients build: ' .. tostring(err)) end
 
--- ── Return module table (OpenMW interface registration pattern) ────────────
--- The `interface` field is picked up by `require('openmw.interfaces')` and
--- mounted as `interfaces.AlchemyHelper`.
+end
+
 return {
+    engineHandlers = {
+        onContentFilesLoaded = loadDB
+    }
 }
