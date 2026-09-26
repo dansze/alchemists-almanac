@@ -416,9 +416,7 @@ function AlchemyUI.show()
     if not panelState.panel then
         AlchemyUI.create()
     end
-    -- TODO: ui.show(panel) or equivalent
-    -- panel = ui.show and ui.show(panelState.panel)
-    -- panel = openmw_aux.ui.show and openmw_aux.ui.show(panel)
+    ui.show(panelState.panel)
     panelState.visible = true
 end
 
@@ -427,9 +425,7 @@ function AlchemyUI.hide()
     if not panelState.visible then
         return
     end
-    -- TODO: ui.hide(panel) or equivalent
-    -- ui.hide and ui.hide(panelState.panel)
-    -- openmw_aux.ui.hide and openmw_aux.ui.hide(panelState.panel)
+    ui.hide(panelState.panel)
     panelState.visible = false
 end
 
@@ -439,9 +435,7 @@ function AlchemyUI.destroy()
     if not panelState.panel then
         return
     end
-    -- TODO: ui.destroy(panel) or equivalent
-    -- ui.destroy and ui.destroy(panelState.panel)
-    -- openmw_aux.ui.destroy and openmw_aux.ui.destroy(panelState.panel)
+    ui.destroy(panelState.panel)
     panelState.panel = nil
     panelState.visible = false
     panelState.currentId = nil

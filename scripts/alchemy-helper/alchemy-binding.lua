@@ -9,6 +9,7 @@ local input = require('openmw.input')
 local alchemyUI = require('scripts.alchemy-helper.alchemy-ui')
 local interface = require('openmw.interfaces')
 local ui = require('openmw.ui')
+local async = require('openmw.async')
 
 -- Settings group / field keys (must match load-db.lua registration).
 local SETTINGS_GROUP = 'SettingsPlayerAlchemyHelper'
@@ -57,6 +58,7 @@ interface.Settings.registerGroup {
 local showing = false
 local function handleUI(val)
     if not val then return end
+    ui.showMessage('Button pressed')
     if not showing then
         alchemyUI.show()
     else
@@ -64,7 +66,7 @@ local function handleUI(val)
     end
 end
 
-input.registerActionHandler(SETTINGS_ACTION, handleUI)
+input.registerActionHandler(SETTINGS_ACTION, async:callback(handleUI))
 
 return {
 }
