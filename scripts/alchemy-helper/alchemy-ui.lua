@@ -7,8 +7,14 @@
 -- No MWUI XML templates. No keybind wiring. No save/load. No menu detection.
 
 local ui = require('openmw.ui')
+local async = require('openmw.async')
+local util = require('openmw.util')
 
 local db = require('scripts.alchemy-helper.shared.db')
+
+local function v2(x, y)
+    return util.vector2(x or 0, y or 0)
+end
 
 -- ---------------------------------------------------------------------------
 -- Configuration — plain Lua table.
@@ -28,8 +34,6 @@ local CONFIG = {
         buttonColor = nil,
         fontSizeTitle = 16,
         fontSizeBody = 12,
-        padding = 5,
-        margin = 2,
         border = true,
     },
 }
@@ -53,13 +57,26 @@ local function calcPosition(corner, panelWidth, panelHeight, ox, oy)
     end
 end
 
--- Text widget props helper.
 local function textProp(txt, sz)
     return {
         text = txt,
         textSize = sz or 12,
         autoSize = false,
     }
+end
+
+local function flexProp()
+    return {
+        horizontal = false,
+        autoSize = false,
+        align = ui.ALIGNMENT.Start,
+        arrange = ui.ALIGNMENT.Start,
+        size = v2(0, 0),
+    }
+end
+
+local function fixedSize()
+    return { size = v2(0, 0) }
 end
 
 -- Merge CONFIG into a layout table.  Modifies in-place.
@@ -75,21 +92,7 @@ local function applyConfigToLayout(layout, config)
         local px = valid
             and calcPosition(pos.corner, pw, ph, pos.offsetX, pos.offsetY)
             or calcPosition('bottom-right', pw, ph, 50, 50)
-        layout.props.x = px.x
-        layout.props.y = px.y
-    end
-
-    if theme then
-        if theme.fontSizeTitle ~= nil then layout.props.titleSize = theme.fontSizeTitle end
-        if theme.fontSizeBody ~= nil then layout.props.bodySize = theme.fontSizeBody end
-        if theme.padding ~= nil then layout.props.padding = theme.padding end
-        if theme.margin ~= nil then layout.props.margin = theme.margin end
-        if theme.backgroundColor ~= nil then layout.props.backgroundColor = theme.backgroundColor end
-        if theme.borderColor ~= nil then layout.props.borderColor = theme.borderColor end
-        if theme.titleColor ~= nil then layout.props.titleColor = theme.titleColor end
-        if theme.textColor ~= nil then layout.props.textColor = theme.textColor end
-        if theme.buttonColor ~= nil then layout.props.buttonColor = theme.buttonColor end
-        if theme.border ~= nil then layout.props.border = theme.border end
+        layout.props.position = v2(px.x, px.y)
     end
 
     return layout
@@ -99,6 +102,11 @@ end
 -- Module state
 -- ---------------------------------------------------------------------------
 local AlchemyUI = {}
+
+-- Close button callback userdata.
+local closeCallback = async:callback(function()
+    AlchemyUI.hide()
+end)
 
 local panelState = {
     panel = nil,
@@ -113,31 +121,21 @@ local panelState = {
 
 -- Build the root panel layout table.
 local function buildPanelLayout()
-    local flexProp = function(h, pad)
-        return {
-            horizontal = h or false,
-            autoSize = false,
-            align = ui.ALIGNMENT.Start,
-            arrange = ui.ALIGNMENT.Start,
-            padding = pad or 5,
-        }
-    end
-
     return {
         type = ui.TYPE.Window,
         props = {
-            size = { x = 400, y = 500 },
+            size = v2(400, 500),
         },
         content = ui.content {
             -- Outer vertical Flex
             {
                 type = ui.TYPE.Flex,
-                props = flexProp(false, 5),
+                props = flexProp(),
                 content = ui.content {
                     -- Title bar row (horizontal Flex)
                     {
                         type = ui.TYPE.Flex,
-                        props = flexProp(true, 5),
+                        props = flexProp(),
                         content = ui.content {
                             {
                                 type = ui.TYPE.Text,
@@ -146,7 +144,7 @@ local function buildPanelLayout()
                             {
                                 type = ui.TYPE.Flex,
                                 external = { grow = 1 },
-                                props = { size = { x = 0, y = 0 } },
+                                props = fixedSize(),
                             },
                             -- Close button (Flex with mouseClick event + Text child)
                             {
@@ -155,12 +153,10 @@ local function buildPanelLayout()
                                     horizontal = false,
                                     autoSize = true,
                                     align = ui.ALIGNMENT.Center,
-                                    size = { x = 30, y = 30 },
+                                    size = v2(30, 30),
                                 },
                                 events = {
-                                    mouseClick = function()
-                                        AlchemyUI.hide()
-                                    end,
+                                    mouseClick = closeCallback,
                                 },
                                 content = ui.content {
                                     {
@@ -177,19 +173,19 @@ local function buildPanelLayout()
                         type = ui.TYPE.Container,
                         name = 'scrollArea',
                         props = {
-                            relativeSize = { x = 1, y = 0 },  -- fill remaining height
-                            size = { x = 0, y = 0 },
+                            relativeSize = v2(1, 0),  -- fill remaining height
+                            size = v2(0, 0),
                         },
                         content = ui.content {
                             -- Inner vertical Flex (populated by populateEffects)
                             {
                                 type = ui.TYPE.Flex,
                                 name = 'contentContainer',
-                                props = flexProp(false, 5),
+                                props = flexProp(),
                                 content = ui.content {
                                     {
                                         type = ui.TYPE.Flex,
-                                        props = { size = { x = 0, y = 0 } },
+                                        props = fixedSize(),
                                     },
                                 },
                             },
@@ -242,7 +238,7 @@ local function populateEffects(contentArea, effects)
     contentArea.content = ui.content {
         {
             type = ui.TYPE.Flex,
-            props = { size = { x = 0, y = 0 } },
+            props = fixedSize(),
         },
     }
 
@@ -257,9 +253,7 @@ local function populateEffects(contentArea, effects)
                 horizontal = false,
                 autoSize = false,
                 align = ui.ALIGNMENT.Start,
-                size = { x = 0, y = 0 },
-                padding = 5,
-                margin = 2,
+                size = v2(0, 0),
             },
             content = ui.content {
                 -- Effect name
@@ -314,7 +308,7 @@ local function populateEffects(contentArea, effects)
                 -- Separator: thin Widget
                 {
                     type = ui.TYPE.Widget,
-                    props = { size = { x = 0, y = 1 } },
+                    props = { size = v2(0, 1) },
                 },
             },
         }
@@ -398,26 +392,19 @@ function AlchemyUI.show()
         AlchemyUI.create()
     end
     if panelState.panel then
-        ui.show(panelState.panel)
+        panelState.panel.layout.layer = 'Windows'
+        panelState.panel:update()
         panelState.visible = true
     end
 end
 
-function AlchemyUI.hide()
-    if not panelState.visible then
-        return
-    end
-    if panelState.panel then
-        ui.hide(panelState.panel)
-    end
-    panelState.visible = false
-end
+
 
 function AlchemyUI.destroy()
     if not panelState.panel then
         return
     end
-    ui.destroy(panelState.panel)
+    panelState.panel:destroy()
     panelState.panel = nil
     panelState.visible = false
     panelState.currentId = nil
