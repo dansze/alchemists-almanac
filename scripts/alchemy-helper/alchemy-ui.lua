@@ -137,6 +137,8 @@ local panelState = {
 local function buildPanelLayout()
     return {
         type = ui.TYPE.Container,
+        name = 'AlchemyEffectsPanel',
+        template = interfaces.MWUI and interfaces.MWUI.templates.boxSolid,
         props = {
             size = v2(400, 500),
         },
@@ -236,7 +238,7 @@ local function createPanel()
     panelState.panel = panel
 
     -- Walk layout by index to find inner content Flex.
-    -- Structure: Window -> VFlex -> [titleRow, scrollContainer]
+    -- Structure: Widget -> [VFlex] -> [titleRow, scrollContainer]
     local outerFlex = layout.content and layout.content[1]
     if outerFlex then
         local scrollContainer = outerFlex.content and outerFlex.content[2]
@@ -417,7 +419,7 @@ function AlchemyUI.show()
     end
     ui.showMessage('Button pressed')
     if not interfaces.UI.getMode() then
-        interfaces.UI.setMode('Interface', { windows = {} })
+        interfaces.UI.setMode('Interface', { windows = { 'AlchemyEffectsPanel' } })
         ownsMode = true
     end
     if panelState.panel then
