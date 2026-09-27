@@ -121,6 +121,68 @@ end)
 
 -- Track whether we own the Interface mode (prevents conflicts with other mods).
 local ownsMode = false
+local applyingMode = false
+
+-- Deep-copy helper (matches openmw_aux.ui.deepLayoutCopy).
+local function deepLayoutCopy(src)
+    local dst = {}
+    for k, v in pairs(src) do
+        if type(v) == 'table' then
+            dst[k] = deepLayoutCopy(v)
+        else
+            dst[k] = v
+        end
+    end
+    return dst
+end
+
+-- Strip drag/resize markers from a copied template.
+local function stripDragMarkers(node)
+    if type(node) ~= 'table' then return end
+    if node.name == 'caption' then node.name = nil end
+    if node.external then
+        node.external.action = nil
+        node.external.move = nil
+        node.external.resize = nil
+    end
+    if node.content then
+        for _, child in ipairs(node.content) do
+            stripDragMarkers(child)
+        end
+    end
+end
+
+-- Build a bordered frame template: copy boxThick, inject a background Image,
+-- set type = Container, strip drag markers. Matches DailyTraining pattern.
+local function frameTemplate()
+    local base = interfaces.MWUI and interfaces.MWUI.templates.boxThick
+        or interfaces.MWUI and interfaces.MWUI.templates.box
+        or interfaces.MWUI and interfaces.MWUI.templates.borders
+    if not base then return nil end
+    local tpl = deepLayoutCopy(base)
+    tpl.type = ui.TYPE.Container
+    stripDragMarkers(tpl)
+
+    -- Background Image fills the inner area behind the border.
+    local bg = {
+        type = ui.TYPE.Image,
+        props = {
+            resource = ui.texture { path = 'white' },
+            color = util.color.rgb(0.08, 0.08, 0.08),
+            alpha = 0.95,
+            relativeSize = v2(1, 1),
+            size = v2(0, 0),
+            position = v2(0, 0),
+        },
+    }
+
+    local rebuilt = { bg }
+    for _, child in ipairs(tpl.content) do
+        rebuilt[#rebuilt + 1] = child
+    end
+    tpl.content = ui.content(rebuilt)
+    return tpl
+end
 
 local panelState = {
     panel = nil,
@@ -133,12 +195,12 @@ local panelState = {
 -- UI Construction — all types use ui.TYPE values.
 -- ---------------------------------------------------------------------------
 
--- Build the root panel layout table.
+-- Build the root panel layout table.  No name — the window is
+-- unnamed, matching DailyTraining's approach: the mode renders the
+-- first window regardless of name.
 local function buildPanelLayout()
     return {
         type = ui.TYPE.Container,
-        name = 'AlchemyEffectsPanel',
-        template = interfaces.MWUI and interfaces.MWUI.templates.boxSolid,
         props = {
             size = v2(400, 500),
         },
@@ -221,25 +283,32 @@ local function buildPanelLayout()
     }
 end
 
--- Create (or reuse) the panel.  Sets panelState references.
-local function createPanel()
+-- (Re)build the window.  Destroys existing, creates fresh.
+-- Sets panelState.panel and panelState.contentPanel.
+local function rebuildWindow()
     if panelState.panel then
-        return panelState.panel
+        panelState.panel:destroy()
+        panelState.panel = nil
     end
 
-    local layout = applyConfigToLayout(buildPanelLayout(), CONFIG)
-    layout.layer = 'Windows'
-    local panel = ui.create(layout)
+    local frameTmpl = frameTemplate()
 
+    -- Build content (the frame template wraps this with border + background).
+    local layout = applyConfigToLayout(buildPanelLayout(), CONFIG)
+    if frameTmpl then
+        layout.template = frameTmpl
+    end
+    layout.layer = 'Windows'
+
+    local panel = ui.create(layout)
     if not panel then
         return nil
     end
 
     panelState.panel = panel
 
-    -- Walk layout by index to find inner content Flex.
-    -- Structure: Widget -> [VFlex] -> [titleRow, scrollContainer]
-    local outerFlex = layout.content and layout.content[1]
+    -- Walk layout: Container -> [bgImage, VFlex] -> [titleRow, scrollContainer]
+    local outerFlex = layout.content and layout.content[2]
     if outerFlex then
         local scrollContainer = outerFlex.content and outerFlex.content[2]
         if scrollContainer then
@@ -251,6 +320,14 @@ local function createPanel()
     end
 
     return panel
+end
+
+-- Create (or reuse) the panel.  Sets panelState references.
+local function createPanel()
+    if panelState.panel then
+        return panelState.panel
+    end
+    return rebuildWindow()
 end
 
 -- Populate the scrollable content area with effect blocks.
@@ -398,9 +475,29 @@ local function queryAndFormatEffects(effectIds)
     return result
 end
 
--- ---------------------------------------------------------------------------
--- Public API
--- ---------------------------------------------------------------------------
+-- Reconcile Interface mode ownership.  Must be called BEFORE the
+-- window element is built (window mode intent is checked, not the
+-- element itself).
+local function reconcilePause()
+    if applyingMode then return end
+    local want = panelState.visible
+    if want == ownsMode then return end
+
+    local mode = interfaces.UI.getMode()
+    applyingMode = true
+    if want then
+        if mode == nil then
+            interfaces.UI.setMode('Interface', { windows = {} })
+            ownsMode = true
+        end
+    else
+        if mode == 'Interface' then
+            interfaces.UI.removeMode('Interface')
+        end
+        ownsMode = false
+    end
+    applyingMode = false
+end
 
 function AlchemyUI.isVisible()
     return panelState.visible
@@ -410,7 +507,7 @@ function AlchemyUI.create()
     if panelState.panel then
         return panelState.panel
     end
-    return createPanel()
+    return rebuildWindow()
 end
 
 function AlchemyUI.show()
@@ -418,22 +515,18 @@ function AlchemyUI.show()
         return
     end
     ui.showMessage('Button pressed')
-    if not interfaces.UI.getMode() then
-        interfaces.UI.setMode('Interface', { windows = { 'AlchemyEffectsPanel' } })
-        ownsMode = true
-    end
-    if panelState.panel then
-        panelState.panel:destroy()
-        panelState.panel = nil
-    end
+    -- Set mode BEFORE building the window (matches DailyTraining order).
+    panelState.visible = true
+    reconcilePause()
     if not panelState.panel then
         ui.showMessage('Init UI')
         AlchemyUI.create()
     end
-    if panelState.panel then
-        ui.showMessage('UI ready')
-        panelState.visible = true
+    if not panelState.panel then
+        ui.showMessage('UI creation failed')
+        return
     end
+    ui.showMessage('UI ready')
 end
 
 function AlchemyUI.hide()
@@ -446,10 +539,7 @@ function AlchemyUI.hide()
     end
     panelState.visible = false
     panelState.contentPanel = nil
-    if ownsMode and interfaces.UI.getMode() == 'Interface' then
-        interfaces.UI.removeMode('Interface')
-        ownsMode = false
-    end
+    reconcilePause()
 end
 
 function AlchemyUI.destroy()
