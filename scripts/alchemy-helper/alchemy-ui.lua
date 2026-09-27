@@ -7,6 +7,7 @@
 -- No MWUI XML templates. No keybind wiring. No save/load. No menu detection.
 
 local ui = require('openmw.ui')
+local interfaces = require('openmw.interfaces')
 local async = require('openmw.async')
 local util = require('openmw.util')
 
@@ -389,6 +390,8 @@ function AlchemyUI.show()
         return
     end
     ui.showMessage('Button pressed')
+    interfaces.UI.addMode('AlchemyUI')
+    interfaces.UI.setHudVisibility(false)
     if not panelState.panel then
         ui.showMessage('Init UI')
         AlchemyUI.create()
@@ -401,7 +404,18 @@ function AlchemyUI.show()
     end
 end
 
-
+function AlchemyUI.hide()
+    if not panelState.visible then
+        return
+    end
+    if panelState.panel then
+        panelState.panel.layout.layer = nil
+        panelState.panel:update()
+    end
+    panelState.visible = false
+    interfaces.UI.removeMode('AlchemyUI')
+    interfaces.UI.setHudVisibility(true)
+end
 
 function AlchemyUI.destroy()
     if not panelState.panel then
