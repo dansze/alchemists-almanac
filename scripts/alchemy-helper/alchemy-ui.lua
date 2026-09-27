@@ -205,6 +205,7 @@ local function createPanel()
     end
 
     local layout = applyConfigToLayout(buildPanelLayout(), CONFIG)
+    layout.layer = 'Windows'
     local panel = ui.create(layout)
 
     if not panel then
@@ -390,8 +391,12 @@ function AlchemyUI.show()
         return
     end
     ui.showMessage('Button pressed')
-    interfaces.UI.addMode('AlchemyUI')
-    interfaces.UI.setHudVisibility(false)
+    if not interfaces.UI.getMode() then
+        interfaces.UI.setMode('Interface', { windows = {} })
+    end
+    if interfaces.UI.isHudVisible() then
+        interfaces.UI.setHudVisibility(false)
+    end
     if not panelState.panel then
         ui.showMessage('Init UI')
         AlchemyUI.create()
@@ -413,7 +418,9 @@ function AlchemyUI.hide()
         panelState.panel:update()
     end
     panelState.visible = false
-    interfaces.UI.removeMode('AlchemyUI')
+    if interfaces.UI.getMode() == 'Interface' then
+        interfaces.UI.removeMode('Interface')
+    end
     interfaces.UI.setHudVisibility(true)
 end
 
