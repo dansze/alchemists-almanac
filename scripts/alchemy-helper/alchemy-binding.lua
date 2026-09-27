@@ -58,7 +58,6 @@ interface.Settings.registerGroup {
 local showing = false
 local function handleUI(val)
     if not val then return end
-    ui.showMessage('Button pressed')
     if not showing then
         alchemyUI.show()
     else

@@ -388,10 +388,13 @@ function AlchemyUI.show()
     if panelState.visible then
         return
     end
+    ui.showMessage('Button pressed')
     if not panelState.panel then
+        ui.showMessage('Init UI')
         AlchemyUI.create()
     end
     if panelState.panel then
+        ui.showMessage('UI ready')
         panelState.panel.layout.layer = 'Windows'
         panelState.panel:update()
         panelState.visible = true
