@@ -55,10 +55,9 @@ interface.Settings.registerGroup {
     },
 }
 
-local showing = false
 local function handleUI(val)
     if not val then return end
-    if not showing then
+    if not alchemyUI.isVisible() then
         alchemyUI.show()
     else
         alchemyUI.hide()

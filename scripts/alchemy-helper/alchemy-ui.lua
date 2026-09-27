@@ -400,6 +400,10 @@ end
 -- Public API
 -- ---------------------------------------------------------------------------
 
+function AlchemyUI.isVisible()
+    return panelState.visible
+end
+
 function AlchemyUI.create()
     if panelState.panel then
         return panelState.panel
