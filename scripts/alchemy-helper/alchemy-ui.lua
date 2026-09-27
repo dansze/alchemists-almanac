@@ -72,7 +72,17 @@ local function flexProp()
         autoSize = false,
         align = ui.ALIGNMENT.Start,
         arrange = ui.ALIGNMENT.Start,
-        size = v2(0, 0),
+        relativeSize = v2(1, 1),
+    }
+end
+
+local function flexPropH()
+    return {
+        horizontal = true,
+        autoSize = false,
+        align = ui.ALIGNMENT.Center,
+        arrange = ui.ALIGNMENT.Center,
+        relativeSize = v2(1, 0),
     }
 end
 
@@ -136,10 +146,17 @@ local function buildPanelLayout()
                 type = ui.TYPE.Flex,
                 props = flexProp(),
                 content = ui.content {
-                    -- Title bar row (horizontal Flex)
+                    -- Title bar row (horizontal, fixed height)
                     {
                         type = ui.TYPE.Flex,
-                        props = flexProp(),
+                        props = {
+                            horizontal = true,
+                            autoSize = false,
+                            align = ui.ALIGNMENT.Center,
+                            arrange = ui.ALIGNMENT.Center,
+                            size = v2(0, 30),
+                            relativeSize = v2(1, 0),
+                        },
                         content = ui.content {
                             {
                                 type = ui.TYPE.Text,
@@ -168,14 +185,12 @@ local function buildPanelLayout()
                             },
                         },
                     },
-                    -- Scrollable content area (Container with fixed size,
-                    -- inner Flex that overflows)
+                    -- Scrollable content area (fills remaining height)
                     {
                         type = ui.TYPE.Container,
                         name = 'scrollArea',
                         props = {
-                            relativeSize = v2(1, 0),  -- fill remaining height
-                            size = v2(0, 0),
+                            relativeSize = v2(1, 0),
                         },
                         content = ui.content {
                             -- Inner vertical Flex (populated by populateEffects)
@@ -186,7 +201,13 @@ local function buildPanelLayout()
                                 content = ui.content {
                                     {
                                         type = ui.TYPE.Flex,
-                                        props = fixedSize(),
+                                        props = {
+                                            horizontal = false,
+                                            autoSize = false,
+                                            align = ui.ALIGNMENT.Start,
+                                            arrange = ui.ALIGNMENT.Start,
+                                            relativeSize = v2(0, 1),
+                                        },
                                     },
                                 },
                             },
