@@ -109,6 +109,9 @@ local closeCallback = async:callback(function()
     AlchemyUI.hide()
 end)
 
+-- Track whether we own the Interface mode (prevents conflicts with other mods).
+local ownsMode = false
+
 local panelState = {
     panel = nil,
     contentPanel = nil,
@@ -123,7 +126,7 @@ local panelState = {
 -- Build the root panel layout table.
 local function buildPanelLayout()
     return {
-        type = ui.TYPE.Window,
+        type = ui.TYPE.Container,
         props = {
             size = v2(400, 500),
         },
@@ -147,17 +150,14 @@ local function buildPanelLayout()
                                 external = { grow = 1 },
                                 props = fixedSize(),
                             },
-                            -- Close button (Flex with mouseClick event + Text child)
+                            -- Close button (Widget with mouseRelease event + Text child)
                             {
-                                type = ui.TYPE.Flex,
+                                type = ui.TYPE.Widget,
                                 props = {
-                                    horizontal = false,
-                                    autoSize = true,
-                                    align = ui.ALIGNMENT.Center,
                                     size = v2(30, 30),
                                 },
                                 events = {
-                                    mouseClick = closeCallback,
+                                    mouseRelease = closeCallback,
                                 },
                                 content = ui.content {
                                     {
@@ -393,9 +393,11 @@ function AlchemyUI.show()
     ui.showMessage('Button pressed')
     if not interfaces.UI.getMode() then
         interfaces.UI.setMode('Interface', { windows = {} })
+        ownsMode = true
     end
-    if interfaces.UI.isHudVisible() then
-        interfaces.UI.setHudVisibility(false)
+    if panelState.panel then
+        panelState.panel:destroy()
+        panelState.panel = nil
     end
     if not panelState.panel then
         ui.showMessage('Init UI')
@@ -403,8 +405,6 @@ function AlchemyUI.show()
     end
     if panelState.panel then
         ui.showMessage('UI ready')
-        panelState.panel.layout.layer = 'Windows'
-        panelState.panel:update()
         panelState.visible = true
     end
 end
@@ -414,14 +414,15 @@ function AlchemyUI.hide()
         return
     end
     if panelState.panel then
-        panelState.panel.layout.layer = nil
-        panelState.panel:update()
+        panelState.panel:destroy()
+        panelState.panel = nil
     end
     panelState.visible = false
-    if interfaces.UI.getMode() == 'Interface' then
+    panelState.contentPanel = nil
+    if ownsMode and interfaces.UI.getMode() == 'Interface' then
         interfaces.UI.removeMode('Interface')
+        ownsMode = false
     end
-    interfaces.UI.setHudVisibility(true)
 end
 
 function AlchemyUI.destroy()
