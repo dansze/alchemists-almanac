@@ -69,20 +69,18 @@ end
 local function flexProp()
     return {
         horizontal = false,
-        autoSize = false,
+        autoSize = true,
         align = ui.ALIGNMENT.Start,
         arrange = ui.ALIGNMENT.Start,
-        relativeSize = v2(1, 1),
     }
 end
 
 local function flexPropH()
     return {
         horizontal = true,
-        autoSize = false,
+        autoSize = true,
         align = ui.ALIGNMENT.Center,
         arrange = ui.ALIGNMENT.Center,
-        relativeSize = v2(1, 0),
     }
 end
 
@@ -136,75 +134,67 @@ local panelState = {
 
 -- Build the inner UI content (the panel body, separate from the
 -- border frame).  Returns ui.content — ready to pass as the
--- 'content' slot of the root Container.
+-- 'content' slot of the root Container.  Wraps everything in the
+-- padding template so the boxThick template's padding slot is filled.
 local function buildPanelContent()
     return ui.content {
-        -- Outer vertical Flex
         {
-            type = ui.TYPE.Flex,
-            props = flexProp(),
+            template = interfaces.MWUI.templates.padding,
             content = ui.content {
-                -- Title bar row (horizontal, fixed height)
+                -- Outer vertical Flex
                 {
                     type = ui.TYPE.Flex,
-                    props = {
-                        horizontal = true,
-                        autoSize = false,
-                        align = ui.ALIGNMENT.Center,
-                        arrange = ui.ALIGNMENT.Center,
-                        relativeSize = v2(1, 0),
-                    },
+                    props = flexProp(),
                     content = ui.content {
-                        {
-                            type = ui.TYPE.Text,
-                            props = textProp('Alchemy Effects', 16),
-                        },
+                        -- Title bar row (horizontal, fixed height)
                         {
                             type = ui.TYPE.Flex,
-                            external = { grow = 1 },
-                            props = fixedSize(),
-                        },
-                        -- Close button (Widget with mouseRelease event + Text child)
-                        {
-                            type = ui.TYPE.Widget,
                             props = {
-                                size = v2(30, 30),
-                            },
-                            events = {
-                                mouseRelease = closeCallback,
+                                horizontal = true,
+                                autoSize = true,
+                                align = ui.ALIGNMENT.Center,
+                                arrange = ui.ALIGNMENT.Center,
                             },
                             content = ui.content {
                                 {
                                     type = ui.TYPE.Text,
-                                    props = textProp('✖', 14),
+                                    props = textProp('Alchemy Effects', 16),
+                                },
+                                {
+                                    type = ui.TYPE.Flex,
+                                    external = { grow = 1 },
+                                    props = fixedSize(),
+                                },
+                                -- Close button (Widget with mouseRelease event + Text child)
+                                {
+                                    type = ui.TYPE.Widget,
+                                    props = {
+                                        size = v2(30, 30),
+                                    },
+                                    events = {
+                                        mouseRelease = closeCallback,
+                                    },
+                                    content = ui.content {
+                                        {
+                                            type = ui.TYPE.Text,
+                                            props = textProp('\u2715', 14),
+                                        },
+                                    },
                                 },
                             },
                         },
-                    },
-                },
-                -- Scrollable content area (fills remaining height)
-                {
-                    type = ui.TYPE.Container,
-                    name = 'scrollArea',
-                    props = {
-                        relativeSize = v2(1, 1),
-                    },
-                    content = ui.content {
-                        -- Inner vertical Flex (populated by populateEffects)
+                        -- Scrollable content area (fills remaining height)
                         {
-                            type = ui.TYPE.Flex,
-                            name = 'contentContainer',
-                            props = flexProp(),
+                            type = ui.TYPE.Container,
+                            name = 'scrollArea',
+                            props = fixedSize(),
                             content = ui.content {
+                                -- Inner vertical Flex (populated by populateEffects)
                                 {
                                     type = ui.TYPE.Flex,
-                                    props = {
-                                        horizontal = false,
-                                        autoSize = false,
-                                        align = ui.ALIGNMENT.Start,
-                                        arrange = ui.ALIGNMENT.Start,
-                                        relativeSize = v2(0, 1),
-                                    },
+                                    name = 'contentContainer',
+                                    props = flexProp(),
+                                    content = ui.content {},
                                 },
                             },
                         },
@@ -254,18 +244,16 @@ local function rebuildWindow()
     end
 
     local pos = CONFIG and CONFIG.positioning
-    local ox = (pos and pos.offsetX) or 50
-    local oy = (pos and pos.offsetY) or 50
     local corner = pos and pos.corner or 'bottom-right'
-    local px = calcPosition(corner, 400, 500, ox, oy)
+    local anchorX = (corner == 'top-left' or corner == 'bottom-left') and 0 or 1
+    local anchorY = (corner == 'top-left' or corner == 'top-right') and 0 or 1
 
     local layout = {
         type = ui.TYPE.Container,
         template = frameTemplate(),
         props = {
-            size = v2(500,400),
-            anchor = v2(0.5, 0.5),
-            relativePosition = v2(0.5, 0.5),
+            anchor = v2(anchorX, anchorY),
+            relativePosition = v2(anchorX, anchorY),
         },
         content = buildPanelContent(),
         layer = 'Windows',
@@ -280,16 +268,12 @@ local function rebuildWindow()
     panelState.panel = panel
 
     -- Walk the layout content.  Structure:
-    --   Container -> [outerFlex] -> [titleBar, scrollArea]
-    if layout.content and layout.content[1] then
-        local outerFlex = layout.content[1]
-        if outerFlex and outerFlex.content and outerFlex.content[2] then
-            local scrollContainer = outerFlex.content[2]
-            if scrollContainer and scrollContainer.content and scrollContainer.content[1] then
-                panelState.contentPanel = scrollContainer.content[1]
-            end
-        end
-    end
+    --   Container -> [padding] -> [outerFlex] -> [titleBar, scrollArea] -> [contentContainer]
+    local p = layout.content and layout.content[1]
+    if p and p.content then p = p.content[1] end
+    if p and p.content then p = p.content[2] end
+    if p and p.content then p = p.content[1] end
+    panelState.contentPanel = p
     return panel
 end
 
