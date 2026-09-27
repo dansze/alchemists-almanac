@@ -123,67 +123,6 @@ end)
 local ownsMode = false
 local applyingMode = false
 
--- Deep-copy helper (matches openmw_aux.ui.deepLayoutCopy).
-local function deepLayoutCopy(src)
-    local dst = {}
-    for k, v in pairs(src) do
-        if type(v) == 'table' then
-            dst[k] = deepLayoutCopy(v)
-        else
-            dst[k] = v
-        end
-    end
-    return dst
-end
-
--- Strip drag/resize markers from a copied template.
-local function stripDragMarkers(node)
-    if type(node) ~= 'table' then return end
-    if node.name == 'caption' then node.name = nil end
-    if node.external then
-        node.external.action = nil
-        node.external.move = nil
-        node.external.resize = nil
-    end
-    if node.content then
-        for _, child in ipairs(node.content) do
-            stripDragMarkers(child)
-        end
-    end
-end
-
--- Build a bordered frame template: copy boxThick, inject a background Image,
--- set type = Container, strip drag markers. Matches DailyTraining pattern.
-local function frameTemplate()
-    local base = interfaces.MWUI and interfaces.MWUI.templates.boxThick
-        or interfaces.MWUI and interfaces.MWUI.templates.box
-        or interfaces.MWUI and interfaces.MWUI.templates.borders
-    if not base then return nil end
-    local tpl = deepLayoutCopy(base)
-    tpl.type = ui.TYPE.Container
-    stripDragMarkers(tpl)
-
-    -- Background Image fills the inner area behind the border.
-    local bg = {
-        type = ui.TYPE.Image,
-        props = {
-            resource = ui.texture { path = 'white' },
-            color = util.color.rgb(0.08, 0.08, 0.08),
-            alpha = 0.95,
-            relativeSize = v2(1, 1),
-            size = v2(0, 0),
-            position = v2(0, 0),
-        },
-    }
-
-    local rebuilt = { bg }
-    for _, child in ipairs(tpl.content) do
-        rebuilt[#rebuilt + 1] = child
-    end
-    tpl.content = ui.content(rebuilt)
-    return tpl
-end
-
 local panelState = {
     panel = nil,
     contentPanel = nil,
@@ -195,83 +134,76 @@ local panelState = {
 -- UI Construction — all types use ui.TYPE values.
 -- ---------------------------------------------------------------------------
 
--- Build the root panel layout table.  No name — the window is
--- unnamed, matching DailyTraining's approach: the mode renders the
--- first window regardless of name.
-local function buildPanelLayout()
-    return {
-        type = ui.TYPE.Container,
-        props = {
-            size = v2(400, 500),
-        },
-        content = ui.content {
-            -- Outer vertical Flex
-            {
-                type = ui.TYPE.Flex,
-                props = flexProp(),
-                content = ui.content {
-                    -- Title bar row (horizontal, fixed height)
-                    {
-                        type = ui.TYPE.Flex,
-                        props = {
-                            horizontal = true,
-                            autoSize = false,
-                            align = ui.ALIGNMENT.Center,
-                            arrange = ui.ALIGNMENT.Center,
-                            size = v2(0, 30),
-                            relativeSize = v2(1, 0),
+-- Build the inner UI content (the panel body, separate from the
+-- border frame).  Returns ui.content — ready to pass as the
+-- 'content' slot of the root Container.
+local function buildPanelContent()
+    return ui.content {
+        -- Outer vertical Flex
+        {
+            type = ui.TYPE.Flex,
+            props = flexProp(),
+            content = ui.content {
+                -- Title bar row (horizontal, fixed height)
+                {
+                    type = ui.TYPE.Flex,
+                    props = {
+                        horizontal = true,
+                        autoSize = false,
+                        align = ui.ALIGNMENT.Center,
+                        arrange = ui.ALIGNMENT.Center,
+                        relativeSize = v2(1, 0),
+                    },
+                    content = ui.content {
+                        {
+                            type = ui.TYPE.Text,
+                            props = textProp('Alchemy Effects', 16),
                         },
-                        content = ui.content {
-                            {
-                                type = ui.TYPE.Text,
-                                props = textProp('Alchemy Effects', 16),
+                        {
+                            type = ui.TYPE.Flex,
+                            external = { grow = 1 },
+                            props = fixedSize(),
+                        },
+                        -- Close button (Widget with mouseRelease event + Text child)
+                        {
+                            type = ui.TYPE.Widget,
+                            props = {
+                                size = v2(30, 30),
                             },
-                            {
-                                type = ui.TYPE.Flex,
-                                external = { grow = 1 },
-                                props = fixedSize(),
+                            events = {
+                                mouseRelease = closeCallback,
                             },
-                            -- Close button (Widget with mouseRelease event + Text child)
-                            {
-                                type = ui.TYPE.Widget,
-                                props = {
-                                    size = v2(30, 30),
-                                },
-                                events = {
-                                    mouseRelease = closeCallback,
-                                },
-                                content = ui.content {
-                                    {
-                                        type = ui.TYPE.Text,
-                                        props = textProp('✖', 14),
-                                    },
+                            content = ui.content {
+                                {
+                                    type = ui.TYPE.Text,
+                                    props = textProp('✖', 14),
                                 },
                             },
                         },
                     },
-                    -- Scrollable content area (fills remaining height)
-                    {
-                        type = ui.TYPE.Container,
-                        name = 'scrollArea',
-                        props = {
-                            relativeSize = v2(1, 0),
-                        },
-                        content = ui.content {
-                            -- Inner vertical Flex (populated by populateEffects)
-                            {
-                                type = ui.TYPE.Flex,
-                                name = 'contentContainer',
-                                props = flexProp(),
-                                content = ui.content {
-                                    {
-                                        type = ui.TYPE.Flex,
-                                        props = {
-                                            horizontal = false,
-                                            autoSize = false,
-                                            align = ui.ALIGNMENT.Start,
-                                            arrange = ui.ALIGNMENT.Start,
-                                            relativeSize = v2(0, 1),
-                                        },
+                },
+                -- Scrollable content area (fills remaining height)
+                {
+                    type = ui.TYPE.Container,
+                    name = 'scrollArea',
+                    props = {
+                        relativeSize = v2(1, 1),
+                    },
+                    content = ui.content {
+                        -- Inner vertical Flex (populated by populateEffects)
+                        {
+                            type = ui.TYPE.Flex,
+                            name = 'contentContainer',
+                            props = flexProp(),
+                            content = ui.content {
+                                {
+                                    type = ui.TYPE.Flex,
+                                    props = {
+                                        horizontal = false,
+                                        autoSize = false,
+                                        align = ui.ALIGNMENT.Start,
+                                        arrange = ui.ALIGNMENT.Start,
+                                        relativeSize = v2(0, 1),
                                     },
                                 },
                             },
@@ -283,6 +215,36 @@ local function buildPanelLayout()
     }
 end
 
+
+local auxUi = require('openmw_aux.ui')
+
+local function frameTemplate()
+    local base = interfaces.MWUI.templates.boxThick
+        or interfaces.MWUI.templates.box
+        or interfaces.MWUI.templates.borders
+    local tpl = auxUi.deepLayoutCopy(base)
+    tpl.type = ui.TYPE.Container
+
+    local background = {
+        name = 'background',
+        type = ui.TYPE.Image,
+            props = {
+                resource = ui.texture { path = 'white' },
+                color = util.color.rgb(0.3, 0.3, 0.3),
+                alpha = 0.5,
+                relativeSize = v2(1, 1),
+                size = v2(0, 0),
+            },
+    }
+
+    local rebuilt = { background }
+    for _, child in ipairs(tpl.content) do
+        rebuilt[#rebuilt + 1] = child
+    end
+    tpl.content = ui.content(rebuilt)
+    return tpl
+end
+
 -- (Re)build the window.  Destroys existing, creates fresh.
 -- Sets panelState.panel and panelState.contentPanel.
 local function rebuildWindow()
@@ -291,34 +253,43 @@ local function rebuildWindow()
         panelState.panel = nil
     end
 
-    local frameTmpl = frameTemplate()
+    local pos = CONFIG and CONFIG.positioning
+    local ox = (pos and pos.offsetX) or 50
+    local oy = (pos and pos.offsetY) or 50
+    local corner = pos and pos.corner or 'bottom-right'
+    local px = calcPosition(corner, 400, 500, ox, oy)
 
-    -- Build content (the frame template wraps this with border + background).
-    local layout = applyConfigToLayout(buildPanelLayout(), CONFIG)
-    if frameTmpl then
-        layout.template = frameTmpl
-    end
-    layout.layer = 'Windows'
+    local layout = {
+        type = ui.TYPE.Container,
+        template = frameTemplate(),
+        props = {
+            size = v2(500,400),
+            anchor = v2(0.5, 0.5),
+            relativePosition = v2(0.5, 0.5),
+        },
+        content = buildPanelContent(),
+        layer = 'Windows',
+    }
 
     local panel = ui.create(layout)
     if not panel then
+        ui.showMessage('Failed to init window')
         return nil
     end
 
     panelState.panel = panel
 
-    -- Walk layout: Container -> [bgImage, VFlex] -> [titleRow, scrollContainer]
-    local outerFlex = layout.content and layout.content[2]
-    if outerFlex then
-        local scrollContainer = outerFlex.content and outerFlex.content[2]
-        if scrollContainer then
-            local innerContainer = scrollContainer.content and scrollContainer.content[1]
-            if innerContainer then
-                panelState.contentPanel = innerContainer
+    -- Walk the layout content.  Structure:
+    --   Container -> [outerFlex] -> [titleBar, scrollArea]
+    if layout.content and layout.content[1] then
+        local outerFlex = layout.content[1]
+        if outerFlex and outerFlex.content and outerFlex.content[2] then
+            local scrollContainer = outerFlex.content[2]
+            if scrollContainer and scrollContainer.content and scrollContainer.content[1] then
+                panelState.contentPanel = scrollContainer.content[1]
             end
         end
     end
-
     return panel
 end
 
@@ -514,19 +485,15 @@ function AlchemyUI.show()
     if panelState.visible then
         return
     end
-    ui.showMessage('Button pressed')
     -- Set mode BEFORE building the window (matches DailyTraining order).
     panelState.visible = true
     reconcilePause()
     if not panelState.panel then
-        ui.showMessage('Init UI')
         AlchemyUI.create()
     end
     if not panelState.panel then
-        ui.showMessage('UI creation failed')
         return
     end
-    ui.showMessage('UI ready')
 end
 
 function AlchemyUI.hide()
