@@ -10,8 +10,10 @@ local ui = require('openmw.ui')
 local interfaces = require('openmw.interfaces')
 local async = require('openmw.async')
 local util = require('openmw.util')
+local storage = require('openmw.storage')
 
 local db = require('scripts.alchemy-helper.shared.db')
+local SETTINGS = require('scripts.alchemy-helper.shared.settings')
 
 local function v2(x, y)
     return util.vector2(x or 0, y or 0)
@@ -404,6 +406,27 @@ end
 -- Query Effects
 -- ---------------------------------------------------------------------------
 
+--- Immersive Mode (mod setting, default on): only show ingredients the
+-- player has encountered. Read live so in-game toggles apply immediately.
+local function isImmersiveMode()
+    local section = storage.playerSection(SETTINGS.group)
+    return section:get(SETTINGS.immersiveMode) ~= false
+end
+
+local function filterDiscovered(ids)
+    local seen = {}
+    for _, id in ipairs(db.getDiscovered()) do
+        seen[id] = true
+    end
+    local out = {}
+    for _, id in ipairs(ids or {}) do
+        if seen[id] then
+            out[#out + 1] = id
+        end
+    end
+    return out
+end
+
 local function queryAndFormatEffects(effectIds)
     if #effectIds == 0 then
         return {}
@@ -415,12 +438,17 @@ local function queryAndFormatEffects(effectIds)
         return {}
     end
 
+    local immersive = isImmersiveMode()
     local result = {}
     for effId, data in pairs(rawResults) do
+        local ingredients = data.ingredients or {}
+        if immersive then
+            ingredients = filterDiscovered(ingredients)
+        end
         result[#result + 1] = {
             effId = effId,
             effName = data.effName or effId,
-            ingredients = data.ingredients or {},
+            ingredients = ingredients,
             sharedIngredient = data.sharedIngredient,
             pairs = data.pairs or {},
             triples = data.triples or {},

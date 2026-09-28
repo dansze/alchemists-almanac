@@ -1,8 +1,9 @@
--- Alchemist's Almanac — Alchemy Keybind Binding (PLAYER context)
+-- Alchemist's Almanac — Mod Settings + Keybind Binding (PLAYER context)
 --
--- Reads the keybind from the Settings system on each onKeyPress call —
--- no caching — so in-game rebinding takes effect immediately.
--- Falls back to 'l' when no custom value is stored.
+-- Registers the mod's Settings page/group (keybind + Immersive Mode) and
+-- wires the keybind action to the almanac UI. The keybind is read from
+-- the Settings system live (no caching) so in-game rebinding takes effect
+-- immediately. Default keybind: '\\'.
 
 local input = require('openmw.input')
 local alchemyUI = require('scripts.alchemy-helper.alchemy-ui')
@@ -10,14 +11,11 @@ local interface = require('openmw.interfaces')
 local ui = require('openmw.ui')
 local async = require('openmw.async')
 
--- Settings group / field keys (Settings registration not yet implemented).
-local SETTINGS_GROUP = 'SettingsPlayerAlchemyHelper'
-local SETTINGS_KEY   = 'AlchemyHelperKeyBind'
-local SETTINGS_ACTION = 'AlchemyHelperKey'
+local SETTINGS = require('scripts.alchemy-helper.shared.settings')
 
 -- Settings
 input.registerAction {
-    key = SETTINGS_ACTION,
+    key = SETTINGS.action,
     type = input.ACTION_TYPE.Boolean,
     name = '',
     l10n = 'AlchemyHelper',
@@ -33,7 +31,7 @@ interface.Settings.registerPage {
 }
 
 interface.Settings.registerGroup {
-    key = SETTINGS_GROUP,
+    key = SETTINGS.group,
     l10n = 'AlchemyHelper',
     page = 'AlchemyHelper',
     name = 'AlchemyHelper',
@@ -41,15 +39,24 @@ interface.Settings.registerGroup {
     permanentStorage = true,
     settings = {
         {
-            key = SETTINGS_KEY,
+            key = SETTINGS.keyBind,
             renderer = 'inputBinding',
             name = 'Almanac Keybind',
             description = 'Keybind to open the almanac.',
-            default = '',
+            -- Default binding: backslash. (Symbol-string format; adjust if
+            -- the settings UI shows it unresolved.)
+            default = '\\',
             argument = {
-                key = SETTINGS_ACTION,
+                key = SETTINGS.action,
                 type = 'action',
             },
+        },
+        {
+            key = SETTINGS.immersiveMode,
+            renderer = 'checkbox',
+            name = 'Immersive Mode',
+            description = 'Only show ingredients and merchants the player has encountered.',
+            default = true,
         },
     },
 }
@@ -63,7 +70,7 @@ local function handleUI(val)
     end
 end
 
-input.registerActionHandler(SETTINGS_ACTION, async:callback(handleUI))
+input.registerActionHandler(SETTINGS.action, async:callback(handleUI))
 
 return {
 }
