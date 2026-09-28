@@ -177,7 +177,7 @@ local function buildPanelContent()
                                     content = ui.content {
                                         {
                                             type = ui.TYPE.Text,
-                                            props = textProp('\u2715', 14),
+                                            props = textProp('✕', 14),
                                         },
                                     },
                                 },
@@ -384,7 +384,7 @@ local function resolveIngredientEffects(ingredientId)
     end
     local result = {}
     for _, entry in ipairs(effList) do
-        result[#result + 1] = entry[1]
+        result[#result + 1] = entry:match('^[^~]*')
     end
     return result
 end

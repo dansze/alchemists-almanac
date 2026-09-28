@@ -1,8 +1,9 @@
 -- Alchemist's Almanac — Alchemy Effect Database + Settings Registration (LOAD context)
 --
 -- Runs once during content load. Builds the complete effect lookup database
--- from `content.ingredients.records` and `content.magicEffects.records`,
--- then registers `queryEffects(ids)` on `interfaces.AlchemyHelper`.
+-- in `scripts.alchemy-helper.shared.db`. The `AlchemyHelper` interface
+-- (queryByEffect / querySharedWith / queryEffects / getDiscovered) is
+-- exposed by init.lua over this shared database.
 --
 -- Also registers the Settings page / group / keybind field so users can
 -- view and change the alchemy-helper keybind in-game.  Settings
@@ -35,12 +36,14 @@ local function loadDB()
                     for _, eff in ipairs(ing.effects) do
                         local effId = eff and eff.id
                         if effId and effId ~= '' then
+                            -- Compound key "effId~attribute~skill"; the '~'
+                            -- separator lets callers recover the bare effect ID.
                             local entry = effId
                             if eff.affectedAttribute then
-                                entry = entry .. eff.affectedAttribute
+                                entry = entry .. '~' .. eff.affectedAttribute
                             end
                             if eff.affectedSkill then
-                                entry = entry .. eff.affectedSkill
+                                entry = entry .. '~' .. eff.affectedSkill
                             end
                             effList[#effList + 1] = entry
                         end
@@ -52,19 +55,8 @@ local function loadDB()
     end)
     if not success and type(logError) == 'function' then logError('ingredientEffects build: ' .. tostring(err)) end
 
-    local success, err = pcall(function()
-        for ingId, effList in pairs(db.ingredientEffects) do
-            for _, eff in ipairs(effList) do
-                local effId = eff
-                if not  db.effectIngredients[effId] then
-                    db.effectIngredients[effId] = {}
-                end
-                local entries =  db.effectIngredients[effId]
-                entries[#entries + 1] = ingId
-            end
-        end
-    end)
-    if not success and type(logError) == 'function' then logError('effectIngredients build: ' .. tostring(err)) end
+    local success, err = pcall(db.rebuildIndexes)
+    if not success and type(logError) == 'function' then logError('effect index build: ' .. tostring(err)) end
 
 end
 

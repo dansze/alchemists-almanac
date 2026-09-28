@@ -34,7 +34,20 @@ local function onLoad(saved)
 end
 
 
+-- ── AlchemyHelper interface ────────────────────────────────────────────────
+-- Exposed to other Lua scripts and the in-game console (`lua global`):
+--   require('openmw.interfaces').AlchemyHelper.queryByEffect('health', true)
+--   ...querySharedWith('slaughterfish_egg')
+--   ...getDiscovered()
 return {
+    interfaceName = 'AlchemyHelper',
+    interface = {
+        version = 1,
+        queryByEffect = ingredients.queryByEffect,
+        querySharedWith = ingredients.querySharedWith,
+        queryEffects = ingredients.queryEffects,
+        getDiscovered = ingredients.getDiscovered,
+    },
     engineHandlers = {
         onSave = onSave,
         onLoad = onLoad,
