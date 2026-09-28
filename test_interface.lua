@@ -43,12 +43,17 @@ local function expectEqual(set, expected, msg)
     end
 end
 
--- Seed like load-db.lua does (compound "effId~attribute~skill" keys)
-db.storeIndexes({
-    a = { 'health~Health' },
-    b = { 'health~Magicka', 'fire~' },
-    c = { 'frost~' },
-})
+-- Seed via the real path: records -> buildIngredientEffects -> storeIndexes
+local records = {
+    { id = 'a', effects = { { id = 'health', affectedAttribute = 'Health' } } },
+    { id = 'b', effects = { { id = 'health', affectedAttribute = 'Magicka' }, { id = 'fire' } } },
+    { id = 'c', effects = { { id = 'frost' } } },
+    { id = '', effects = {} },              -- skipped: empty id
+    { id = 'd', effects = { nil, { id = '' } } },  -- skipped: no usable effects
+}
+db.storeIndexes(db.buildIngredientEffects(records))
+assert(db.getIngredientEffects('a')[1] == 'health~Health', 'compound key attr')
+assert(db.getIngredientEffects('b')[2] == 'fire', 'bare effId, no trailing separator')
 
 -- Discovered: dedupe + Persistent section
 db.discoverIngredient('a')

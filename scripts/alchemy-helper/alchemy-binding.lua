@@ -1,7 +1,6 @@
 -- Alchemist's Almanac — Alchemy Keybind Binding (PLAYER context)
 --
--- Reads the keybind from the Settings system (registered via
--- openmw.interfaces.Settings in load-db.lua) on each onKeyPress call —
+-- Reads the keybind from the Settings system on each onKeyPress call —
 -- no caching — so in-game rebinding takes effect immediately.
 -- Falls back to 'l' when no custom value is stored.
 
@@ -11,7 +10,7 @@ local interface = require('openmw.interfaces')
 local ui = require('openmw.ui')
 local async = require('openmw.async')
 
--- Settings group / field keys (must match load-db.lua registration).
+-- Settings group / field keys (Settings registration not yet implemented).
 local SETTINGS_GROUP = 'SettingsPlayerAlchemyHelper'
 local SETTINGS_KEY   = 'AlchemyHelperKeyBind'
 local SETTINGS_ACTION = 'AlchemyHelperKey'

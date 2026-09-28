@@ -5,8 +5,9 @@
 -- sections; this module only provides functions over those sections.
 --
 -- Sections:
---   AlchemyHelperIndex      GameSession lifetime — rebuilt on every game load
---                           by load-db.lua (LOAD context).
+--   AlchemyHelperIndex      GameSession lifetime — built at global script
+--                           start from types.Ingredient.records (init.lua;
+--                           the LOAD context has no storage access).
 --                           keys: ingredientEffects, effectIngredients,
 --                                 baseEffectIngredients
 --   AlchemyHelperDiscovered Persistent lifetime — key: ids (array of
@@ -52,10 +53,37 @@ local function readIndex()
     return storage.globalSection(INDEX_SECTION):asTable()
 end
 
+--- Convert a list of ingredient records ({ id, effects = { { id,
+--- affectedAttribute?, affectedSkill? } } }) into the ingredientEffects
+--- map. Entries are compound strings "effId~attribute~skill" (empty parts
+--- omitted, '~' separated).
+function M.buildIngredientEffects(records)
+    local ingredientEffects = {}
+    for _, ing in ipairs(records or {}) do
+        if ing and ing.id and ing.id ~= '' then
+            local effList = {}
+            if ing.effects then
+                for _, eff in ipairs(ing.effects) do
+                    local effId = eff and eff.id
+                    if effId and effId ~= '' then
+                        local entry = effId
+                        if eff.affectedAttribute then
+                            entry = entry .. '~' .. eff.affectedAttribute
+                        end
+                        if eff.affectedSkill then
+                            entry = entry .. '~' .. eff.affectedSkill
+                        end
+                        effList[#effList + 1] = entry
+                    end
+                end
+            end
+            ingredientEffects[ing.id] = effList
+        end
+    end
+    return ingredientEffects
+end
+
 --- Store the full ingredientEffects map and rebuild both effect indexes.
---- Called from the LOAD script after scanning content records.
---- ingredientEffects entries are compound strings "effId~attribute~skill"
---- (empty parts omitted, '~' separated).
 function M.storeIndexes(ingredientEffects)
     local effIngredients = {}
     local baseIngredients = {}
