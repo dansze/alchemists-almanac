@@ -10,9 +10,12 @@
 --                           the LOAD context has no storage access).
 --                           keys: ingredientEffects, effectIngredients,
 --                                 baseEffectIngredients
---   AlchemyHelperDiscovered Persistent lifetime — key: ids (array of
---                           discovered ingredient ID strings). Written by
---                           the GLOBAL script only.
+--   AlchemyHelperDiscovered Persistent lifetime — keys:
+--                           ids       (array of discovered ingredient IDs)
+--                           merchants (map of merchant record ID ->
+--                                     { name, ingredients = [restocking
+--                                     supply IDs] })
+--                           Written by the GLOBAL script only.
 --
 -- Write paths call setLifeTime; read paths never do (only global-ish
 -- contexts may modify sections).
@@ -28,7 +31,7 @@ local DISCOVERED_SECTION = 'AlchemyHelperDiscovered'
 local indexLifetimeSet = false
 local discoveredLifetimeSet = false
 
---- Write access to the index section (LOAD context). GameSession lifetime.
+--- Write access to the index section (GLOBAL context). GameSession lifetime.
 local function indexSection()
     local s = storage.globalSection(INDEX_SECTION)
     if not indexLifetimeSet then
@@ -129,6 +132,42 @@ end
 --- All discovered ingredient IDs (array).
 function M.getDiscovered()
     return storage.globalSection(DISCOVERED_SECTION):get('ids') or {}
+end
+
+--- Record a discovered ingredient merchant. GLOBAL context only.
+--- An NPC/Creature offering both Barter and Ingredients services.
+--- Restocking supply = ingredients held at negative count in its inventory.
+--- Re-encounters update the name and union the restocking supply.
+function M.discoverMerchant(merchantId, name, ingredientIds)
+    if type(merchantId) ~= 'string' or merchantId == '' then
+        return
+    end
+    local s = discoveredSection()
+    local merchants = s:getCopy('merchants') or {}
+    local entry = merchants[merchantId]
+    if not entry then
+        entry = { ingredients = {} }
+        merchants[merchantId] = entry
+    end
+    if type(name) == 'string' and name ~= '' then
+        entry.name = name
+    end
+    local seen = {}
+    for _, id in ipairs(entry.ingredients) do
+        seen[id] = true
+    end
+    for _, id in ipairs(ingredientIds or {}) do
+        if type(id) == 'string' and not seen[id] then
+            seen[id] = true
+            entry.ingredients[#entry.ingredients + 1] = id
+        end
+    end
+    s:set('merchants', merchants)
+end
+
+--- All discovered ingredient merchants: map of record ID -> { name, ingredients }.
+function M.getMerchants()
+    return storage.globalSection(DISCOVERED_SECTION):get('merchants') or {}
 end
 
 local function discoveredSet()

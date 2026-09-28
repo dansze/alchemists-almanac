@@ -86,4 +86,17 @@ local qe = db.queryEffects({ 'fire', 'nope' })
 assert(qe.fire and #qe.fire.ingredients == 1 and qe.fire.ingredients[1] == 'b', 'queryEffects fire')
 assert(qe.nope == nil, 'queryEffects unknown effect omitted')
 
+-- Merchants: store + union on re-encounter + Persistent section
+db.discoverMerchant('merchant_a', 'Aldori', { 'a', 'c' })
+db.discoverMerchant('merchant_a', 'Aldori', { 'c', 'b' }) -- union, no dupes
+assert(db.getMerchants().merchant_a.name == 'Aldori', 'merchant name')
+expectEqual(asSet(db.getMerchants().merchant_a.ingredients), { a = true, b = true, c = true }, 'merchant restock union')
+db.discoverMerchant('merchant_b', nil, {}) -- merchant without restocking supply
+assert(db.getMerchants().merchant_b and #db.getMerchants().merchant_b.ingredients == 0, 'merchant empty restock')
+db.discoverMerchant(nil, 'x', {}) -- ignored
+assert(db.getMerchants().x == nil, 'merchant nil id ignored')
+-- merchants live in the same Persistent section as discovered ingredients
+local stored = require('openmw.storage').globalSection('AlchemyHelperDiscovered'):asTable()
+assert(stored.ids and stored.merchants, 'merchants stored in discovered section')
+
 print('OK: all db interface checks passed')

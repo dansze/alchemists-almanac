@@ -9,7 +9,8 @@
 --   - discovered ingredients: Persistent lifetime, written here only
 --
 -- ingredient-detect.lua (LOCAL context) cannot write to storage, so it
--- reports pickups via the AlchemyHelperDiscoverIngredient global event.
+-- reports discoveries via AlchemyHelperDiscoverIngredient /
+-- AlchemyHelperDiscoverMerchant global events.
 
 local db = require('scripts.alchemy-helper.shared.db')
 local types = require('openmw.types')
@@ -24,10 +25,18 @@ if not ok and type(print) == 'function' then
     print('[AlchemyHelper] index build: ' .. tostring(err))
 end
 
---- Event payload from ingredient-detect.lua: { id = <ingredient record ID> }.
+--- Event payloads from ingredient-detect.lua:
+---   { id = <ingredient record ID> }
+---   { id = <merchant record ID>, name, ingredients = [restocking supply IDs] }
 local function onDiscoverIngredient(data)
     if data and type(data.id) == 'string' then
         db.discoverIngredient(data.id)
+    end
+end
+
+local function onDiscoverMerchant(data)
+    if data and type(data.id) == 'string' then
+        db.discoverMerchant(data.id, data.name, data.ingredients)
     end
 end
 
@@ -39,8 +48,10 @@ return {
         querySharedWith = db.querySharedWith,
         queryEffects = db.queryEffects,
         getDiscovered = db.getDiscovered,
+        getMerchants = db.getMerchants,
     },
     eventHandlers = {
         AlchemyHelperDiscoverIngredient = onDiscoverIngredient,
+        AlchemyHelperDiscoverMerchant = onDiscoverMerchant,
     },
 }
