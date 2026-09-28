@@ -1,55 +1,31 @@
--- Alchemist's Almanac — Ingredient Discovery + Lookup Tables
--- Tracks individual alchemy ingredients the player has collected.
--- Pre-computes all static lookup tables for the alchemy effect system.
+-- Alchemist's Almanac — Global script: AlchemyHelper interface + discovery sink.
 --
--- Discovery: ingredient IDs inserted into discoveredMap via
---   discoverIngredient(ingredientId) called from ingredient-detect.lua.
--- Save/load: ingredient discovery and UI preferences.
+-- Data lives in openmw.storage global sections (see shared/db.lua):
+--   - effect index: GameSession lifetime, rebuilt by load-db.lua on game load
+--   - discovered ingredients: Persistent lifetime, written here only
+--
+-- ingredient-detect.lua (LOCAL context) cannot write to storage, so it
+-- reports pickups via the AlchemyHelperDiscoverIngredient global event.
 
--- ── Persistence: discovered ingredients & preferences ──────────────────────
--- Per-ingredient-ID tracking. Key = ingredient ID string, value = true.
+local db = require('scripts.alchemy-helper.shared.db')
 
-local ingredients = require('scripts.alchemy-helper.shared.db')
-
---- onSave handler: serialize discoveredMap and preferences.
-local function onSave()
-    local discovered = {}
-    for ingId in pairs(ingredients.discoveredIngredients) do
-        discovered[#discovered + 1] = ingId
-    end
-    return {
-        discovered = discovered,
-    }
-end
-
---- onLoad handler: deserialize discovered ingredients and preferences.
-local function onLoad(saved)
-    if not saved then return end
-
-    if saved.discovered then
-        for _, ingId in ipairs(saved.discovered) do
-            ingredients.discoveredIngredients[ingId] = true
-        end
+--- Event payload from ingredient-detect.lua: { id = <ingredient record ID> }.
+local function onDiscoverIngredient(data)
+    if data and type(data.id) == 'string' then
+        db.discoverIngredient(data.id)
     end
 end
 
-
--- ── AlchemyHelper interface ────────────────────────────────────────────────
--- Exposed to other Lua scripts and the in-game console (`lua global`):
---   require('openmw.interfaces').AlchemyHelper.queryByEffect('health', true)
---   ...querySharedWith('slaughterfish_egg')
---   ...getDiscovered()
 return {
     interfaceName = 'AlchemyHelper',
     interface = {
         version = 1,
-        queryByEffect = ingredients.queryByEffect,
-        querySharedWith = ingredients.querySharedWith,
-        queryEffects = ingredients.queryEffects,
-        getDiscovered = ingredients.getDiscovered,
+        queryByEffect = db.queryByEffect,
+        querySharedWith = db.querySharedWith,
+        queryEffects = db.queryEffects,
+        getDiscovered = db.getDiscovered,
     },
-    engineHandlers = {
-        onSave = onSave,
-        onLoad = onLoad,
-    }
+    eventHandlers = {
+        AlchemyHelperDiscoverIngredient = onDiscoverIngredient,
+    },
 }

@@ -1,12 +1,21 @@
 -- Alchemist's Almanac — Ingredient Pickup Detection (LOCAL context)
 --
--- Detects when the player picks up alchemy ingredients into their inventory.
--- Each detected ingredient ID is reported to the GLOBAL script via
--- `interfaces.AlchemyHelper.discoverIngredient(ingredientId)`.
+-- Detects when alchemy ingredients enter the player's inventory (pickup,
+-- container contents, actor in cell). LOCAL scripts cannot write to
+-- openmw.storage, so each detected ID is reported to the GLOBAL script via
+-- a global event; init.lua records it in the Persistent discovered section.
 
-local db = require('scripts.alchemy-helper.shared.db')
+local core = require('openmw.core')
 local self = require('openmw.self')
 local types = require('openmw.types')
+
+local EVENT_NAME = 'AlchemyHelperDiscoverIngredient'
+
+local function report(recordId)
+    if recordId then
+        core.sendGlobalEvent(EVENT_NAME, { id = recordId })
+    end
+end
 
 -- Do not check again once object has been checked.
 local handled = false
@@ -16,20 +25,20 @@ local function discover(init)
     handled = true
 
     if self.type == types.Ingredient then
-        db.discoverIngredient(self.object.recordId)
+        report(self.object and self.object.recordId)
     end
 
     if self.type == types.Container then
         local ingredientList = types.Container.inventory(self.object):getAll(types.Ingredient)
         for _, v in pairs(ingredientList) do
-            db.discoverIngredient()
+            report(v and v.object and v.object.recordId)
         end
     end
 
     if self.type == types.Actor then
         local ingredientList = types.Actor.inventory(self.object):getAll(types.Ingredient)
         for _, v in pairs(ingredientList) do
-            db.discoverIngredient()
+            report(v and v.object and v.object.recordId)
         end
     end
 end

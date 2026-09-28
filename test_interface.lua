@@ -1,5 +1,31 @@
 -- Standalone check for shared/db query functions. Run: lua test_interface.lua
 package.path = './?.lua;' .. package.path
+
+-- Minimal in-memory fake of openmw.storage (global sections only).
+local sections = {}
+local function deepcopy(v)
+    if type(v) ~= 'table' then return v end
+    local c = {}
+    for k, val in pairs(v) do c[k] = deepcopy(val) end
+    return c
+end
+package.preload['openmw.storage'] = function()
+    local M = { LIFE_TIME = { GameSession = '1', Persistent = '0', Temporary = '2' } }
+    -- Methods take self (colon calls), matching the real API.
+    function M.globalSection(name)
+        if not sections[name] then sections[name] = {} end
+        local data = sections[name]
+        return {
+            get = function(self, k) return data[k] end, -- real API: readonly tables
+            getCopy = function(self, k) return deepcopy(data[k]) end,
+            set = function(self, k, v) data[k] = v end,
+            asTable = function(self) return deepcopy(data) end, -- real API returns a copy
+            setLifeTime = function(self, lt) end,
+        }
+    end
+    return M
+end
+
 local db = require('scripts.alchemy-helper.shared.db')
 
 local function asSet(list)
@@ -18,15 +44,18 @@ local function expectEqual(set, expected, msg)
 end
 
 -- Seed like load-db.lua does (compound "effId~attribute~skill" keys)
-db.ingredientEffects = {
+db.storeIndexes({
     a = { 'health~Health' },
     b = { 'health~Magicka', 'fire~' },
     c = { 'frost~' },
-}
-db.discoveredIngredients = {}
+})
+
+-- Discovered: dedupe + Persistent section
 db.discoverIngredient('a')
 db.discoverIngredient('c')
-db.rebuildIndexes()
+db.discoverIngredient('a') -- duplicate, must not double-store
+db.discoverIngredient(nil) -- ignored
+expectEqual(asSet(db.getDiscovered()), { a = true, c = true }, 'getDiscovered')
 
 -- queryByEffect: matches all attribute/skill variants of an effect
 expectEqual(asSet(db.queryByEffect('health')), { a = true, b = true }, 'queryByEffect health')
@@ -42,8 +71,10 @@ expectEqual(asSet(db.querySharedWith('b')), { a = true }, 'querySharedWith b')
 expectEqual(asSet(db.querySharedWith('c', true)), {}, 'querySharedWith c discovered-only (a,b undiscovered)')
 assert(#db.querySharedWith('nope') == 0, 'querySharedWith unknown ingredient')
 
--- getDiscovered
-expectEqual(asSet(db.getDiscovered()), { a = true, c = true }, 'getDiscovered')
+-- getIngredientEffects (UI accessor)
+local effA = db.getIngredientEffects('a')
+assert(effA and #effA == 1 and effA[1] == 'health~Health', 'getIngredientEffects a')
+assert(db.getIngredientEffects('nope') == nil, 'getIngredientEffects unknown')
 
 -- queryEffects (UI shape): map of effectId -> { ingredients = ... }
 local qe = db.queryEffects({ 'fire', 'nope' })

@@ -1,18 +1,14 @@
--- Alchemist's Almanac — Alchemy Effect Database + Settings Registration (LOAD context)
+-- Alchemist's Almanac — Alchemy Effect Database (LOAD context)
 --
--- Runs once during content load. Builds the complete effect lookup database
--- in `scripts.alchemy-helper.shared.db`. The `AlchemyHelper` interface
+-- Runs once during content load. Scans `content.ingredients.records` and
+-- stores the complete effect lookup database in the openmw.storage global
+-- section `AlchemyHelperIndex` (GameSession lifetime) via
+-- `scripts.alchemy-helper.shared.db`. The `AlchemyHelper` interface
 -- (queryByEffect / querySharedWith / queryEffects / getDiscovered) is
--- exposed by init.lua over this shared database.
+-- exposed by init.lua over that storage.
 --
--- Also registers the Settings page / group / keybind field so users can
--- view and change the alchemy-helper keybind in-game.  Settings
--- persistence is handled by `openmw.interfaces.Settings` — no custom
--- config files or ad-hoc storage.
---
--- All tables live at module scope. `queryEffects` is a live closure over them
--- — nothing is serialized. Database is fully rebuilt from scratch on every
--- LOAD event.
+-- Database is fully rebuilt from scratch on every LOAD event, so the
+-- GameSession lifetime matches its real validity.
 --
 -- Constraints: Lua 5.1 sandbox only. No `openmw.world.*` calls
 -- (world not initialized in LOAD). No prohibited ops.
@@ -27,6 +23,10 @@ local function logError(msg)
 end
 
 local function loadDB()
+
+    -- Built locally, then stored whole; storage sections are the only
+    -- cross-context shared state (each script context has its own Lua state).
+    local ingredientEffects = {}
 
     local success, err = pcall(function()
         for _, ing in ipairs(content.ingredients.records) do
@@ -49,14 +49,14 @@ local function loadDB()
                         end
                     end
                 end
-                db.ingredientEffects[ing.id] = effList
+                ingredientEffects[ing.id] = effList
             end
         end
     end)
     if not success and type(logError) == 'function' then logError('ingredientEffects build: ' .. tostring(err)) end
 
-    local success, err = pcall(db.rebuildIndexes)
-    if not success and type(logError) == 'function' then logError('effect index build: ' .. tostring(err)) end
+    local success, err = pcall(db.storeIndexes, ingredientEffects)
+    if not success and type(logError) == 'function' then logError('index store: ' .. tostring(err)) end
 
 end
 

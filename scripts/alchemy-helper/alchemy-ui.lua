@@ -378,7 +378,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local function resolveIngredientEffects(ingredientId)
-    local effList = db.ingredientEffects[ingredientId]
+    local effList = db.getIngredientEffects(ingredientId)
     if not effList then
         return {}
     end
@@ -394,7 +394,7 @@ local function resolveIdToEffectIds(id)
         return {}
     end
 
-    if db.ingredientEffects[id] then
+    if db.getIngredientEffects(id) then
         return resolveIngredientEffects(id)
     end
     return {}
