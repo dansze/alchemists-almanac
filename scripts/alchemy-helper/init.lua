@@ -11,7 +11,11 @@
 -- ingredient-detect.lua (LOCAL context) cannot write to storage, so it
 -- reports discoveries via AlchemyHelperDiscoverIngredient /
 -- AlchemyHelperDiscoverMerchant global events.
+-- The settings "Reset Detection" button (PLAYER context) likewise cannot
+-- write global sections, so it signals AlchemyHelperResetDetection; this
+-- script stamps the last-reset game time in the index section.
 
+local core = require('openmw.core')
 local db = require('scripts.alchemy-helper.shared.db')
 local types = require('openmw.types')
 
@@ -44,6 +48,12 @@ local function onDiscoverMerchant(data)
     end
 end
 
+--- Reset detection: stamp lastReset with the current game time so objects
+--- (re-)initializing from now on re-run detection.
+local function onResetDetection()
+    db.setLastReset(core.getGameTime())
+end
+
 return {
     interfaceName = 'AlchemyHelper',
     interface = {
@@ -57,5 +67,6 @@ return {
     eventHandlers = {
         AlchemyHelperDiscoverIngredient = onDiscoverIngredient,
         AlchemyHelperDiscoverMerchant = onDiscoverMerchant,
+        AlchemyHelperResetDetection = onResetDetection,
     },
 }

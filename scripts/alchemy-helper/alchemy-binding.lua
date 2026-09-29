@@ -5,10 +5,12 @@
 -- the Settings system live (no caching) so in-game rebinding takes effect
 -- immediately. Default keybind: '\\'.
 
+local core = require('openmw.core')
 local input = require('openmw.input')
 local alchemyUI = require('scripts.alchemy-helper.alchemy-ui')
 local interface = require('openmw.interfaces')
 local async = require('openmw.async')
+local storage = require('openmw.storage')
 
 local SETTINGS = require('scripts.alchemy-helper.shared.settings')
 
@@ -57,8 +59,29 @@ interface.Settings.registerGroup {
             description = 'Only show ingredients and merchants the player has encountered.',
             default = true,
         },
+        {
+            key = SETTINGS.resetDetection,
+            renderer = 'checkbox',
+            name = 'Reset Detection',
+            description = 'One-shot action: force ingredients and merchants to be re-detected when they (re)initialize. Flips itself back off after use.',
+            default = false,
+        },
     },
 }
+
+-- "Reset Detection" is a button in disguise: toggling it on stamps the
+-- global last-reset game time (init.lua) and flips the checkbox back off.
+-- The write-back must be deferred: writing to a section from inside its own
+-- subscribe callback throws (storage recursion guard).
+local settingsSection = storage.playerSection(SETTINGS.group)
+settingsSection:subscribe(async:callback(function(_, key)
+    if key ~= SETTINGS.resetDetection then return end
+    if not settingsSection:get(SETTINGS.resetDetection) then return end
+    core.sendGlobalEvent('AlchemyHelperResetDetection')
+    async:newUnsavableRealTimeTimer(0, function()
+        settingsSection:set(SETTINGS.resetDetection, false)
+    end)
+end))
 
 local function handleUI(val)
     if not val then return end

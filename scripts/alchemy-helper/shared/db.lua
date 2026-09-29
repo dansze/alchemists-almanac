@@ -10,7 +10,9 @@
 --                           the LOAD context has no storage access).
 --                           keys: ingredientEffects, effectIngredients,
 --                                 baseEffectIngredients, ingredients
---                                 (id -> { name, icon } display info)
+--                                 (id -> { name, icon } display info),
+--                                 lastReset (game-time seconds of the last
+--                                 detection reset; 0/nil = never)
 --   AlchemyHelperDiscovered Persistent lifetime — keys:
 --                           ids       (array of discovered ingredient IDs)
 --                           merchants (map of merchant record ID ->
@@ -275,6 +277,26 @@ end
 --- Store the display-info map (GameSession index section).
 function M.storeIngredientInfo(info)
     indexSection():set('ingredients', info)
+end
+
+--- Game-time (seconds) of the last detection reset; 0 if never.
+function M.getLastReset()
+    local v = storage.globalSection(INDEX_SECTION):get('lastReset')
+    return type(v) == 'number' and v or 0
+end
+
+--- Stamp a detection reset at the given game time (seconds).
+--- GLOBAL context only (writes storage).
+function M.setLastReset(time)
+    if type(time) ~= 'number' then return end
+    indexSection():set('lastReset', time)
+end
+
+--- Detection gate: an object should (re-)run detection when it has never
+--- been handled (lastHandled == nil) or its last-handled game time is
+--- before the last-reset stamp.
+function M.needsDetection(lastHandled, lastReset)
+    return lastHandled == nil or lastHandled < (lastReset or 0)
 end
 
 --- Full ingredient list for UI display: array of { id, name, icon,

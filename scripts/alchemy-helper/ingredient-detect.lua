@@ -6,10 +6,16 @@
 -- LOCAL scripts cannot write to openmw.storage, so discoveries are reported
 -- to the GLOBAL script via global events; init.lua records them in the
 -- Persistent discovered section.
+--
+-- Re-detection: each object instance remembers the game time it was last
+-- handled (lastHandled). A global "last reset" stamp (set by the settings
+-- button via init.lua) forces re-detection: an object (re-)runs detection
+-- when it has never been handled or lastHandled is before the reset stamp.
 
 local core = require('openmw.core')
 local self = require('openmw.self')
 local types = require('openmw.types')
+local db = require('scripts.alchemy-helper.shared.db')
 
 local EVENT_NAME = 'AlchemyHelperDiscoverIngredient'
 local MERCHANT_EVENT_NAME = 'AlchemyHelperDiscoverMerchant'
@@ -51,12 +57,13 @@ local function reportMerchant(recordId, restock, location)
     end
 end
 
--- Do not check again once object has been checked.
-local handled = false
+-- Game time this object instance was last handled. Each object runs this
+-- script in its own sandbox, so the upvalue is per-object. nil = never.
+local lastHandled = nil
 
 local function discover(init)
-    if handled then return end
-    handled = true
+    if not db.needsDetection(lastHandled, db.getLastReset()) then return end
+    lastHandled = core.getGameTime()
 
     if self.type == types.Ingredient then
         report(self.object and self.object.recordId)
@@ -90,6 +97,6 @@ end
 
 return {
     engineHandlers = {
-        onInit = discover,
+        onLoad = discover,
     },
 }

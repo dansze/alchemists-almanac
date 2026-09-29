@@ -169,4 +169,17 @@ expectEqual(asSet(strictM[1].ingredients),
 local nonStrictHH = db.queryMerchantsForEffects({ 'health~Health' }, false)
 assert(#nonStrictHH == 3, 'non-strict health~Health: merchant_a, sachis, vevagun')
 
+-- Detection reset stamp + gate
+assert(db.getLastReset() == 0, 'lastReset defaults to 0')
+assert(db.needsDetection(nil, 0), 'never handled -> detect even with no reset')
+assert(not db.needsDetection(100, 0), 'handled after default reset -> skip')
+db.setLastReset(50)
+assert(db.getLastReset() == 50, 'setLastReset stamps the index section')
+assert(db.needsDetection(49, 50), 'handled before reset -> re-detect')
+assert(not db.needsDetection(50, 50), 'handled at reset time -> skip (strict <)')
+assert(not db.needsDetection(51, 50), 'handled after reset -> skip')
+assert(db.needsDetection(nil, 50), 'never handled -> detect regardless of reset')
+db.setLastReset('not-a-number') -- ignored
+assert(db.getLastReset() == 50, 'non-number stamp ignored')
+
 print('OK: all db interface checks passed')

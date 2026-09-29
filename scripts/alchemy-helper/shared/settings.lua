@@ -7,4 +7,5 @@ return {
     keyBind = 'AlchemyHelperKeyBind',
     action = 'AlchemyHelperKey',
     immersiveMode = 'ImmersiveMode',
+    resetDetection = 'ResetDetection',
 }
