@@ -53,10 +53,11 @@ local ROW_H_ING = 54
 local ROW_H_EFF = 30
 local ROW_H_MERCH = 74
 
-local C_TEXT = 'rgb(230,230,230)'
-local C_DIM = 'rgb(160,160,160)'
-local C_SEL = 'rgb(255,215,90)'
-local C_WHITE = 'rgb(255,255,255)'
+-- Colors must be Color usertypes (util.color.rgb), not strings.
+local C_TEXT = util.color.rgb(0.9, 0.9, 0.9)
+local C_DIM = util.color.rgb(0.63, 0.63, 0.63)
+local C_SEL = util.color.rgb(1.0, 0.84, 0.35)
+local C_WHITE = util.color.rgb(1, 1, 1)
 
 --- Immersive Mode: filter UI to discovered ingredients. Read live so an
 -- in-game settings toggle applies on the next refresh; nil (unset) = on.
