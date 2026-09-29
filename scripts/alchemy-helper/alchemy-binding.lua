@@ -8,7 +8,6 @@
 local input = require('openmw.input')
 local alchemyUI = require('scripts.alchemy-helper.alchemy-ui')
 local interface = require('openmw.interfaces')
-local ui = require('openmw.ui')
 local async = require('openmw.async')
 
 local SETTINGS = require('scripts.alchemy-helper.shared.settings')

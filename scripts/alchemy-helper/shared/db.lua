@@ -9,7 +9,8 @@
 --                           start from types.Ingredient.records (init.lua;
 --                           the LOAD context has no storage access).
 --                           keys: ingredientEffects, effectIngredients,
---                                 baseEffectIngredients
+--                                 baseEffectIngredients, ingredients
+--                                 (id -> { name, icon } display info)
 --   AlchemyHelperDiscovered Persistent lifetime — keys:
 --                           ids       (array of discovered ingredient IDs)
 --                           merchants (map of merchant record ID ->
@@ -137,8 +138,8 @@ end
 --- Record a discovered ingredient merchant. GLOBAL context only.
 --- An NPC/Creature offering both Barter and Ingredients services.
 --- Restocking supply = ingredients held at negative count in its inventory.
---- Re-encounters update the name and union the restocking supply.
-function M.discoverMerchant(merchantId, name, ingredientIds)
+--- Re-encounters update the name/location and union the restocking supply.
+function M.discoverMerchant(merchantId, name, ingredientIds, location)
     if type(merchantId) ~= 'string' or merchantId == '' then
         return
     end
@@ -151,6 +152,9 @@ function M.discoverMerchant(merchantId, name, ingredientIds)
     end
     if type(name) == 'string' and name ~= '' then
         entry.name = name
+    end
+    if type(location) == 'string' and location ~= '' then
+        entry.location = location
     end
     local seen = {}
     for _, id in ipairs(entry.ingredients) do
@@ -252,6 +256,154 @@ function M.queryEffects(effectIds)
             if ids then
                 out[effId] = { ingredients = ids }
             end
+        end
+    end
+    return out
+end
+
+--- Build the display-info map id -> { name, icon } from ingredient records.
+function M.buildIngredientInfo(records)
+    local info = {}
+    for _, ing in ipairs(records or {}) do
+        if ing and ing.id and ing.id ~= '' then
+            info[ing.id] = { name = ing.name or ing.id, icon = ing.icon }
+        end
+    end
+    return info
+end
+
+--- Store the display-info map (GameSession index section).
+function M.storeIngredientInfo(info)
+    indexSection():set('ingredients', info)
+end
+
+--- Full ingredient list for UI display: array of { id, name, icon,
+--- effects = [compoundKeys] }, sorted by name (case-insensitive). When
+--- discoveredOnly is set, only discovered ingredients are included.
+function M.getIngredientList(discoveredOnly)
+    local idx = readIndex()
+    local info = idx.ingredients or {}
+    local effMap = idx.ingredientEffects or {}
+    local disc = discoveredOnly and discoveredSet() or nil
+    local out = {}
+    for id, meta in pairs(info) do
+        if not disc or disc[id] then
+            out[#out + 1] = {
+                id = id,
+                name = meta.name,
+                icon = meta.icon,
+                effects = effMap[id] or {},
+            }
+        end
+    end
+    table.sort(out, function(a, b)
+        local la = (a.name or ''):lower()
+        local lb = (b.name or ''):lower()
+        if la == lb then return (a.id or '') < (b.id or '') end
+        return la < lb
+    end)
+    return out
+end
+
+--- Display info { name, icon } for one ingredient, or nil.
+function M.getIngredientInfo(ingredientId)
+    local idx = readIndex()
+    local info = idx.ingredients
+    if not info then return nil end
+    return info[ingredientId]
+end
+
+--- Distinct compound effect keys present across all ingredients (or only
+--- discovered ones when discoveredOnly). Array, for the planner's effects list.
+function M.getEffectList(discoveredOnly)
+    local idx = readIndex()
+    local effMap = idx.ingredientEffects or {}
+    local disc = discoveredOnly and discoveredSet() or nil
+    local seen = {}
+    local out = {}
+    for id, effs in pairs(effMap) do
+        if not disc or disc[id] then
+            for _, entry in ipairs(effs) do
+                if not seen[entry] then
+                    seen[entry] = true
+                    out[#out + 1] = entry
+                end
+            end
+        end
+    end
+    return out
+end
+
+--- Map of ingredientId -> number of discovered merchants whose restocking
+--- supply includes it.
+function M.restockCounts()
+    local counts = {}
+    for _, m in pairs(M.getMerchants()) do
+        for _, ingId in ipairs(m.ingredients or {}) do
+            counts[ingId] = (counts[ingId] or 0) + 1
+        end
+    end
+    return counts
+end
+
+--- Query merchants against selected compound effects (AND semantics).
+--- effectKeys: array of compound effect keys. strict: require >=2 distinct
+--- restocking ingredients per effect (otherwise >=1). A merchant qualifies
+--- only if it satisfies EVERY selected effect. Returns an array of
+--- { id, name, location, ingredients = [restock names matching any key] }.
+--- With no keys, all merchants are returned with their full restocking supply.
+function M.queryMerchantsForEffects(effectKeys, strict)
+    local idx = readIndex()
+    local effMap = idx.ingredientEffects or {}
+    local info = idx.ingredients or {}
+    local merchants = M.getMerchants()
+
+    local need = strict and 2 or 1
+    local keys = effectKeys or {}
+    local keySet = {}
+    for _, k in ipairs(keys) do keySet[k] = true end
+
+    local function nameOf(ingId)
+        local meta = info[ingId]
+        return (meta and meta.name) or ingId
+    end
+
+    local out = {}
+    for id, m in pairs(merchants) do
+        local restock = m.ingredients or {}
+        local perKey = {}  -- key -> count of distinct restocking ingredients
+        local matched = {} -- ingredientId -> true (matches any selected key)
+        for _, ingId in ipairs(restock) do
+            local effs = effMap[ingId]
+            if effs then
+                for _, entry in ipairs(effs) do
+                    if keySet[entry] then
+                        matched[ingId] = true
+                        perKey[entry] = (perKey[entry] or 0) + 1
+                    end
+                end
+            end
+        end
+        local ok = true
+        for _, k in ipairs(keys) do
+            if (perKey[k] or 0) < need then ok = false break end
+        end
+        if ok then
+            local list
+            if #keys == 0 then
+                list = {}
+                for _, ingId in ipairs(restock) do list[#list + 1] = nameOf(ingId) end
+            else
+                list = {}
+                for ingId in pairs(matched) do list[#list + 1] = nameOf(ingId) end
+                table.sort(list)
+            end
+            out[#out + 1] = {
+                id = id,
+                name = m.name or id,
+                location = m.location,
+                ingredients = list,
+            }
         end
     end
     return out

@@ -45,13 +45,18 @@ end
 
 -- Seed via the real path: records -> buildIngredientEffects -> storeIndexes
 local records = {
-    { id = 'a', effects = { { id = 'health', affectedAttribute = 'Health' } } },
-    { id = 'b', effects = { { id = 'health', affectedAttribute = 'Magicka' }, { id = 'fire' } } },
-    { id = 'c', effects = { { id = 'frost' } } },
+    { id = 'a', name = 'Blue Mountain', icon = 'n\\tx_a.tga',
+      effects = { { id = 'health', affectedAttribute = 'Health' } } },
+    { id = 'b', name = 'Almsivito', icon = 'n\\tx_b.tga',
+      effects = { { id = 'health', affectedAttribute = 'Magicka' }, { id = 'fire' } } },
+    { id = 'c', name = 'Trebactadine', icon = 'n\\tx_c.tga', effects = { { id = 'frost' } } },
+    { id = 'e', name = 'Alitortoise Egg',
+      effects = { { id = 'health', affectedAttribute = 'Health' } } }, -- same compound as a
     { id = '', effects = {} },              -- skipped: empty id
-    { id = 'd', effects = { nil, { id = '' } } },  -- skipped: no usable effects
+    { id = 'd', effects = { nil, { id = '' } } },  -- no usable effects (name falls back to id)
 }
 db.storeIndexes(db.buildIngredientEffects(records))
+db.storeIngredientInfo(db.buildIngredientInfo(records))
 assert(db.getIngredientEffects('a')[1] == 'health~Health', 'compound key attr')
 assert(db.getIngredientEffects('b')[2] == 'fire', 'bare effId, no trailing separator')
 
@@ -63,7 +68,7 @@ db.discoverIngredient(nil) -- ignored
 expectEqual(asSet(db.getDiscovered()), { a = true, c = true }, 'getDiscovered')
 
 -- queryByEffect: matches all attribute/skill variants of an effect
-expectEqual(asSet(db.queryByEffect('health')), { a = true, b = true }, 'queryByEffect health')
+expectEqual(asSet(db.queryByEffect('health')), { a = true, b = true, e = true }, 'queryByEffect health')
 expectEqual(asSet(db.queryByEffect('frost')), { c = true }, 'queryByEffect frost')
 assert(#db.queryByEffect('nope') == 0, 'queryByEffect unknown effect')
 
@@ -71,8 +76,8 @@ assert(#db.queryByEffect('nope') == 0, 'queryByEffect unknown effect')
 expectEqual(asSet(db.queryByEffect('health', true)), { a = true }, 'queryByEffect health discovered-only')
 
 -- querySharedWith: shares >=1 effect, excludes the ingredient itself
-expectEqual(asSet(db.querySharedWith('a')), { b = true }, 'querySharedWith a')
-expectEqual(asSet(db.querySharedWith('b')), { a = true }, 'querySharedWith b')
+expectEqual(asSet(db.querySharedWith('a')), { b = true, e = true }, 'querySharedWith a')
+expectEqual(asSet(db.querySharedWith('b')), { a = true, e = true }, 'querySharedWith b')
 expectEqual(asSet(db.querySharedWith('c', true)), {}, 'querySharedWith c discovered-only (a,b undiscovered)')
 assert(#db.querySharedWith('nope') == 0, 'querySharedWith unknown ingredient')
 
@@ -98,5 +103,70 @@ assert(db.getMerchants().x == nil, 'merchant nil id ignored')
 -- merchants live in the same Persistent section as discovered ingredients
 local stored = require('openmw.storage').globalSection('AlchemyHelperDiscovered'):asTable()
 assert(stored.ids and stored.merchants, 'merchants stored in discovered section')
+
+-- Display info + ingredient list (sorted by name, case-insensitive)
+assert(db.getIngredientInfo('b').name == 'Almsivito', 'getIngredientInfo name')
+assert(db.getIngredientInfo('b').icon == 'n\\tx_b.tga', 'getIngredientInfo icon')
+assert(db.getIngredientInfo('nope') == nil, 'getIngredientInfo unknown')
+local all = db.getIngredientList(false)
+local names = {}
+for _, it in ipairs(all) do names[#names + 1] = it.name end
+assert(table.concat(names, '|') == 'Alitortoise Egg|Almsivito|Blue Mountain|d|Trebactadine',
+    'getIngredientList sort: ' .. table.concat(names, '|'))
+assert(all[3].icon == 'n\\tx_a.tga' and #all[3].effects == 1, 'list row carries icon+effects')
+local disc = db.getIngredientList(true) -- discovered = a, c
+assert(#disc == 2 and disc[1].id == 'a' and disc[2].id == 'c', 'getIngredientList discovered-only')
+
+-- Effect list: distinct compound keys; discoveredOnly filters by ingredient
+db.discoverIngredient('e') -- now discovered = a, c, e
+local effAll = db.getEffectList(false)
+expectEqual(asSet(effAll),
+    { ['health~Health'] = true, ['health~Magicka'] = true, fire = true, frost = true },
+    'getEffectList all')
+local effDisc = db.getEffectList(true) -- a: health~Health, c: frost, e: health~Health
+expectEqual(asSet(effDisc), { ['health~Health'] = true, frost = true }, 'getEffectList discovered-only')
+
+-- More merchants for planner queries (with locations)
+db.discoverMerchant('sachis', 'Sachis', { 'a' }, 'Sadrith Mora')
+db.discoverMerchant('goro', 'Goro', { 'b' }, 'Balmora')
+db.discoverMerchant('vevagun', 'Vevagun', { 'a', 'e' }, 'Cheydinhal')
+assert(db.getMerchants().sachis.location == 'Sadrith Mora', 'merchant location stored')
+db.discoverMerchant('sachis', 'Sachis II', { 'c' }, 'Anvil') -- re-encounter: union + new location
+expectEqual(asSet(db.getMerchants().sachis.ingredients), { a = true, c = true }, 're-encounter union')
+assert(db.getMerchants().sachis.location == 'Anvil', 'location updated on re-encounter')
+
+-- restockCounts: a -> merchant_a, sachis, vevagun; b -> merchant_a, goro; c -> merchant_a, sachis
+local rc = db.restockCounts()
+assert(rc.a == 3 and rc.b == 2 and rc.c == 2 and rc.e == 1, 'restockCounts')
+
+-- Planner: no keys -> all merchants with full restocking supply (names)
+local allM = db.queryMerchantsForEffects({}, false)
+assert(#allM == 5, 'no keys returns all 5 merchants')
+local byId = {}
+for _, m in ipairs(allM) do byId[m.id] = m end
+expectEqual(asSet(byId.merchant_a.ingredients),
+    { ['Blue Mountain'] = true, Almsivito = true, Trebactadine = true }, 'no-keys full restock names')
+assert(byId.merchant_b and #byId.merchant_b.ingredients == 0, 'no-keys empty restock')
+
+-- Single key, non-strict: >=1 distinct restocking ingredient with that effect
+local fireM = db.queryMerchantsForEffects({ 'fire' }, false)
+byId = {}
+for _, m in ipairs(fireM) do byId[m.id] = m end
+assert(#fireM == 2 and byId.merchant_a and byId.goro, 'fire non-strict: merchant_a + goro')
+expectEqual(asSet(byId.goro.ingredients), { Almsivito = true }, 'matched = union of selected effects')
+
+-- AND semantics: every selected key must be satisfied
+local andM = db.queryMerchantsForEffects({ 'fire', 'frost' }, false)
+assert(#andM == 1 and andM[1].id == 'merchant_a', 'AND: only merchant_a has fire+frost')
+expectEqual(asSet(andM[1].ingredients),
+    { Almsivito = true, Trebactadine = true }, 'AND matched union (b=fire, c=frost)')
+
+-- Strict: >=2 DISTINCT ingredient records per key (same-name dupes count separately)
+local strictM = db.queryMerchantsForEffects({ 'health~Health' }, true)
+assert(#strictM == 1 and strictM[1].id == 'vevagun', 'strict: only vevagun has 2x health~Health')
+expectEqual(asSet(strictM[1].ingredients),
+    { ['Blue Mountain'] = true, ['Alitortoise Egg'] = true }, 'strict matched names')
+local nonStrictHH = db.queryMerchantsForEffects({ 'health~Health' }, false)
+assert(#nonStrictHH == 3, 'non-strict health~Health: merchant_a, sachis, vevagun')
 
 print('OK: all db interface checks passed')

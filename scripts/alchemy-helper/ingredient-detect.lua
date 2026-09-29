@@ -29,15 +29,23 @@ local function getRecord(recordId)
     return rec
 end
 
+--- Last-known cell display name of an object, or nil.
+local function cellName(obj)
+    local cell = obj and obj.cell
+    if not cell then return nil end
+    return cell.displayName or cell.name
+end
+
 --- Report a merchant: services include both Barter and Ingredients.
 -- restock = ingredient record IDs held at negative count (restocking supply).
-local function reportMerchant(recordId, restock)
+local function reportMerchant(recordId, restock, location)
     local rec = getRecord(recordId)
     local services = rec and rec.servicesOffered
     if services and services['Barter'] and services['Ingredients'] then
         core.sendGlobalEvent(MERCHANT_EVENT_NAME, {
             id = recordId,
             name = (rec and rec.name) or recordId,
+            location = location,
             ingredients = restock,
         })
     end
@@ -61,7 +69,9 @@ local function discover(init)
         end
     end
 
-    if self.type == types.Actor then
+    -- NPCs/creatures report their specific package (types.NPC / types.Creature),
+    -- never the base types.Actor table.
+    if self.type == types.NPC or self.type == types.Creature then
         local ingredientList = types.Actor.inventory(self.object):getAll(types.Ingredient)
         local restock = {}
         for _, v in pairs(ingredientList) do
@@ -71,7 +81,10 @@ local function discover(init)
                 restock[#restock + 1] = v.recordId
             end
         end
-        reportMerchant(self.object and self.object.recordId, restock)
+        reportMerchant(
+            self.object and self.object.recordId,
+            restock,
+            cellName(self.object))
     end
 end
 

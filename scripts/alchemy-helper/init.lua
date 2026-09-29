@@ -15,9 +15,12 @@
 local db = require('scripts.alchemy-helper.shared.db')
 local types = require('openmw.types')
 
---- Build and store the effect index from all ingredient records.
+--- Build and store the effect index + display info from all ingredient
+--- records.
 local function buildIndex()
-    db.storeIndexes(db.buildIngredientEffects(types.Ingredient.records))
+    local records = types.Ingredient.records
+    db.storeIndexes(db.buildIngredientEffects(records))
+    db.storeIngredientInfo(db.buildIngredientInfo(records))
 end
 
 local ok, err = pcall(buildIndex)
@@ -27,7 +30,8 @@ end
 
 --- Event payloads from ingredient-detect.lua:
 ---   { id = <ingredient record ID> }
----   { id = <merchant record ID>, name, ingredients = [restocking supply IDs] }
+---   { id = <merchant record ID>, name, location,
+---     ingredients = [restocking supply IDs] }
 local function onDiscoverIngredient(data)
     if data and type(data.id) == 'string' then
         db.discoverIngredient(data.id)
@@ -36,7 +40,7 @@ end
 
 local function onDiscoverMerchant(data)
     if data and type(data.id) == 'string' then
-        db.discoverMerchant(data.id, data.name, data.ingredients)
+        db.discoverMerchant(data.id, data.name, data.ingredients, data.location)
     end
 end
 

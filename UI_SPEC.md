@@ -1,34 +1,46 @@
 # Alchemist's Almanac UI
-The main mod UI consists of a window with two tabs: a searchable Ingredients List, and an effect-based Shopping Planner.
+
+The main mod UI consists of a window with two tabs: a searchable Ingredients List, and an effect-based Shopping Planner. The almanac keybind opens this window (replacing the previous single-panel effect view).
 
 ## Ingredients List
 
-The ingredients list primarily consists of a list of Ingredients and a search bar text field. The ingredients list should show a scrollable view of all ingredients that have a substring match to the search bar with in any of its:
+The ingredients list primarily consists of a list of Ingredients and a search bar text field. The list shows a windowed view — mouse-wheel scrolling with page up/down buttons, since the engine's Lua UI has no native scrollbars — of all ingredients that have a case-insensitive substring match to the search bar in any of:
 
 - Name
-- Effect Names, including any parameters that would affect the display name of the effect like Strength or Fatigue
+- Effect display names, including any parameters that affect the display name of the effect, like Strength or Fatigue
 
-Ingredients should also be filtered to only discovered ingredients if Immersive Mode is on in the mod's settings.
+The list is sorted alphabetically by ingredient name. Ingredients should also be filtered to only discovered ingredients if Immersive Mode is on in the mod's settings.
 
-Each ingredient display should include the following.
+Each ingredient row displays the following.
 
 - Name
-- Icon
-- Effects (including effect icon)
-- Number of discovered merchants that restock the ingredient.
+- Icon (the ingredient record's icon, `IngredientRecord.icon`)
+- Effects (display names; compound — one entry per effect + attribute/skill combination)
+- Number of discovered merchants that restock the ingredient (i.e., include it in their restocking supply). A merchant with the Ingredients service but no restocking supply of the item does not count.
 
 ## Shopping Planner
 
 The shopping planner consists of a header, an effects list, and a merchant list.
 
-The header should have a toggle for a Strict Mode.
+The header has a toggle for Strict Mode. Strict Mode is off by default and session-only (not persisted).
 
-The first is a list of effects, sorted and filterable by name. In Immersive mode, this should only include effects from discovered ingredients. These effects should be selectable. Each selected effect should filter the list of merchants to only include those who have at least one restocking ingredient with that effect, or at least two such ingredients if Strict Mode is enabled.
+### Effects List
 
-The second list shows a list of all discovered merchants, as filtered by the effect selection. They should display the following information:
+A list of effects, one entry per compound effect (effect + attribute/skill combination), sorted and filterable by display name. In Immersive mode, this should only include effects present on discovered ingredients. Entries are selectable; multiple selections use AND semantics — each selected effect further filters the merchant list to only merchants that have at least one restocking ingredient with that effect, or at least two distinct restocking ingredients with that effect if Strict Mode is enabled. "Distinct" means distinct ingredient records: if two mods add their own versions of an ingredient with the same name, they count as two.
+
+### Merchant List
+
+A list of all discovered merchants, filtered by the effect selection (with no effects selected, all discovered merchants are shown). Each merchant displays:
 
 - Actor Name
-- Location Name (the cell they can be found in)
-- List of ingredients they sell that match selected effects
+- Location Name — the last-known cell display name, captured when the merchant was encountered and updated on re-encounter
+- List of ingredients they restock that match any selected effect (ingredient record names; with no selection, their full restocking supply)
 
 The merchant list should be sortable and filterable by both Actor and Location names.
+
+## Notes
+
+- Effect display names come from a mod-shipped data table (effect ID → name, attribute/skill ID → name). Unmapped IDs fall back to showing the raw ID.
+- The only icons used are ingredient record icons; effects are displayed as text.
+- List data is refreshed when the window opens and on tab switch; it is not live-updated while the window stays open.
+- "Restocking supply" means ingredients a merchant holds at a negative count in their inventory — what they sell and restock.
