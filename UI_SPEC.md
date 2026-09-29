@@ -38,6 +38,11 @@ A list of all discovered merchants, filtered by the effect selection (with no ef
 
 The merchant list should be sortable and filterable by both Actor and Location names.
 
+## Implementation Notes (UI)
+
+- Styling follows the native game menus and other Lua mods (Squire spell shop): `boxTransparentThick` window frame, gold/white/dim palette, shadowed text at menu font sizes, absolute positioning inside one window container.
+- The whole window is rebuilt on every change (destroy + `ui.create`). In-place `element:update()` calls are avoided because lua_ui re-attaches TextEdit input widgets on every update, which drops keyboard focus. While a search field is focused, typing only mutates state; the list re-filters when focus leaves the field.
+
 ## Notes
 
 - Effect display names are generated at runtime by splitting CamelCase RefIds into words (e.g. `WeaknessToFire` → "Weakness to Fire"), built from the effects present on ingredient records at init — so mod-added MGEFs get names without any static table. Unmapped attribute/skill targets fall back to showing the raw ID.
