@@ -40,7 +40,7 @@ The merchant list should be sortable and filterable by both Actor and Location n
 
 ## Notes
 
-- Effect display names come from a mod-shipped data table (effect ID → name, attribute/skill ID → name). Unmapped IDs fall back to showing the raw ID.
+- Effect display names are generated at runtime by splitting CamelCase RefIds into words (e.g. `WeaknessToFire` → "Weakness to Fire"), built from the effects present on ingredient records at init — so mod-added MGEFs get names without any static table. Unmapped attribute/skill targets fall back to showing the raw ID.
 - The only icons used are ingredient record icons; effects are displayed as text.
 - List data is refreshed when the window opens and on tab switch; it is not live-updated while the window stays open.
 - "Restocking supply" means ingredients a merchant holds at a negative count in their inventory — what they sell and restock.

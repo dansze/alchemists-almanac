@@ -25,6 +25,7 @@ local function buildIndex()
     local records = types.Ingredient.records
     db.storeIndexes(db.buildIngredientEffects(records))
     db.storeIngredientInfo(db.buildIngredientInfo(records))
+    db.storeEffectNames(db.buildEffectNames(records))
 end
 
 local ok, err = pcall(buildIndex)

@@ -169,6 +169,31 @@ expectEqual(asSet(strictM[1].ingredients),
 local nonStrictHH = db.queryMerchantsForEffects({ 'health~Health' }, false)
 assert(#nonStrictHH == 3, 'non-strict health~Health: merchant_a, sachis, vevagun')
 
+-- Runtime effect names: generated from records at init, no static table
+local nameRecords = {
+    { id = 'x1', effects = {
+        { id = 'WeaknessToFire' },
+        { id = 'FortifyAttribute', affectedAttribute = 'Strength' },
+        { id = 'FortifySkill', affectedSkill = 'HandToHand' },
+        { id = 'SummonCreature04' },
+        { id = 'Sleep' }, -- mod-added MGEF, no static entry needed
+    } },
+}
+local names = db.buildEffectNames(nameRecords)
+assert(names.effectNames.WeaknessToFire == 'Weakness to Fire', 'generated name: To lowercased')
+assert(names.effectNames.SummonCreature04 == 'Summon Creature04', 'generated name: digits stay attached')
+assert(names.effectNames.Sleep == 'Sleep', 'mod-added MGEF gets a generated name')
+assert(names.targetNames.Strength == 'Strength', 'target name: attribute')
+assert(names.targetNames.HandToHand == 'Hand-to-Hand', 'target name: vanilla spelling exception')
+db.storeEffectNames(names)
+local stored = db.getEffectNames()
+assert(stored.effectNames.WeaknessToFire == 'Weakness to Fire', 'name maps survive the index section round-trip')
+assert(db.formatEffectName('WeaknessToFire', stored) == 'Weakness to Fire', 'format: bare key')
+assert(db.formatEffectName('FortifyAttribute~Strength', stored) == 'Fortify Strength', 'format: attribute swap')
+assert(db.formatEffectName('FortifySkill~HandToHand', stored) == 'Fortify Hand-to-Hand', 'format: skill swap')
+assert(db.formatEffectName('WeaknessToFire~Weird', {}) == 'Weakness to Fire Weird', 'format: unmapped target falls back to raw ID')
+assert(db.formatEffectName('BrandNewModEffect', {}) == 'Brand New Mod Effect', 'format: unmapped effId gets generated name')
+
 -- Detection reset stamp + gate
 assert(db.getLastReset() == 0, 'lastReset defaults to 0')
 assert(db.needsDetection(nil, 0), 'never handled -> detect even with no reset')

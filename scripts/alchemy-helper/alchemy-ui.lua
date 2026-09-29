@@ -7,8 +7,9 @@
 --      merchants restock ingredients providing them; optional Strict Mode.
 --
 -- All data comes from shared/db.lua (storage-backed) — this script never
--- touches game records directly. Effect display names come from the static
--- table in shared/data/effects.lua.
+-- touches game records directly. Effect display names are generated at
+-- runtime from the RefIds of effects present on ingredient records
+-- (db.getEffectNames / db.formatEffectName).
 --
 -- lua_ui has no native scrolling/clipping, so lists are *windowed*: only the
 -- visible rows exist as widgets; navigation is mouse wheel + page buttons.
@@ -27,7 +28,6 @@ end
 
 local db = require('scripts.alchemy-helper.shared.db')
 local SETTINGS = require('scripts.alchemy-helper.shared.settings')
-local effects = require('scripts.alchemy-helper.shared.data.effects')
 
 -- Geometry (px). The boxThick frame insets content by 4px at top-left and
 -- overflows 4px at bottom-right; INNER_W/BODY_H plus the 12px centering
@@ -206,10 +206,13 @@ local function merchantLabel(n)
 end
 
 local function makeIngredientRow(counts)
+    -- Name maps are stable per session (built at index time); one copy per
+    -- panel build is enough.
+    local names = db.getEffectNames()
     return function(item)
         local effNames = {}
         for _, key in ipairs(item.effects or {}) do
-            effNames[#effNames + 1] = effects.formatEffectName(key)
+            effNames[#effNames + 1] = db.formatEffectName(key, names)
         end
         table.sort(effNames)
         local iconPart
@@ -491,9 +494,10 @@ function refreshEffects()
     if state.tab ~= 'planner' or not views.eff then
         return
     end
+    local names = db.getEffectNames()
     local items = {}
     for _, key in ipairs(db.getEffectList(immersiveMode())) do
-        items[#items + 1] = { key = key, name = effects.formatEffectName(key) }
+        items[#items + 1] = { key = key, name = db.formatEffectName(key, names) }
     end
     table.sort(items, function(a, b)
         local la, lb = a.name:lower(), b.name:lower()

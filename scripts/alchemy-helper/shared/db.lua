@@ -11,6 +11,11 @@
 --                           keys: ingredientEffects, effectIngredients,
 --                                 baseEffectIngredients, ingredients
 --                                 (id -> { name, icon } display info),
+--                                 effectNames / targetNames (runtime-built
+--                                 RefId -> display name maps; no engine API
+--                                 exists for MGEF names, and mod LOAD scripts
+--                                 can add effects, so the maps are generated
+--                                 from whatever records exist at init time),
 --                                 lastReset (game-time seconds of the last
 --                                 detection reset; 0/nil = never)
 --   AlchemyHelperDiscovered Persistent lifetime — keys:
@@ -277,6 +282,99 @@ end
 --- Store the display-info map (GameSession index section).
 function M.storeIngredientInfo(info)
     indexSection():set('ingredients', info)
+end
+
+-- Display names are generated from CamelCase RefIds at runtime (no engine
+-- API exposes MGEF names). One hand-tuned exception keeps the vanilla skill
+-- spelling.
+local NAME_EXCEPTIONS = { HandToHand = 'Hand-to-Hand' }
+
+--- Display name for a CamelCase RefId ("WeaknessToFire" -> "Weakness to Fire").
+function M.displayName(id)
+    if type(id) ~= 'string' or id == '' then return '' end
+    local name = NAME_EXCEPTIONS[id]
+    if not name then
+        name = id:gsub('([a-z])([A-Z])', '%1 %2'):gsub(' To ', ' to ')
+    end
+    return name
+end
+
+--- Build runtime name maps from ingredient records: every effect ID and
+--- attribute/skill target seen on any record gets a generated display name.
+--- Mod-added MGEFs are covered without any static table.
+function M.buildEffectNames(records)
+    local effectNames = {}
+    local targetNames = {}
+    -- No {attr, skill} table: a nil first entry would hide the second from
+    -- ipairs.
+    local function addTarget(t)
+        if type(t) == 'string' and t ~= '' and not targetNames[t] then
+            targetNames[t] = M.displayName(t)
+        end
+    end
+    for _, ing in ipairs(records or {}) do
+        if ing and ing.effects then
+            for _, eff in ipairs(ing.effects) do
+                local effId = eff and eff.id
+                if type(effId) == 'string' and effId ~= '' and not effectNames[effId] then
+                    effectNames[effId] = M.displayName(effId)
+                end
+                addTarget(eff and eff.affectedAttribute)
+                addTarget(eff and eff.affectedSkill)
+            end
+        end
+    end
+    return { effectNames = effectNames, targetNames = targetNames }
+end
+
+--- Store the runtime name maps (GameSession index section).
+function M.storeEffectNames(names)
+    local s = indexSection()
+    s:set('effectNames', names and names.effectNames or {})
+    s:set('targetNames', names and names.targetNames or {})
+end
+
+--- The stored name maps { effectNames, targetNames } (copies).
+function M.getEffectNames()
+    local idx = readIndex()
+    return {
+        effectNames = idx.effectNames or {},
+        targetNames = idx.targetNames or {},
+    }
+end
+
+--- Display name for a compound effect key "effId[~attribute][~skill]" using
+-- the runtime name maps (see getEffectNames). Generic effects whose base
+-- name ends in "Attribute"/"Skill" swap that word for the target, e.g.
+-- "Fortify Attribute" + Strength -> "Fortify Strength". Unmapped IDs fall
+-- back to a generated name.
+function M.formatEffectName(compoundKey, names)
+    if type(compoundKey) ~= 'string' or compoundKey == '' then return '' end
+    local effectNames = (names and names.effectNames) or {}
+    local targetNames = (names and names.targetNames) or {}
+    -- Split on '~' (gmatch avoids pattern-alternation portability issues).
+    local parts = {}
+    for part in compoundKey:gmatch('[^~]+') do
+        parts[#parts + 1] = part
+    end
+    effId, attr, skill = parts[1], parts[2], parts[3]
+    local name = effectNames[effId] or M.displayName(effId)
+    local target = nil
+    if skill and skill ~= '' then
+        target = targetNames[skill] or skill
+    elseif attr and attr ~= '' then
+        target = targetNames[attr] or attr
+    end
+    if target then
+        -- No '|' alternation: pattern semantics differ across Lua versions.
+        local base = name:match('^(.*) Attribute$') or name:match('^(.*) Skill$')
+        if base then
+            name = base .. ' ' .. target
+        else
+            name = name .. ' ' .. target
+        end
+    end
+    return name
 end
 
 --- Game-time (seconds) of the last detection reset; 0 if never.
