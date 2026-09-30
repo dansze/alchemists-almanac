@@ -49,9 +49,11 @@ local function onDiscoverMerchant(data)
     end
 end
 
---- Reset detection: stamp lastReset with the current game time so objects
---- (re-)initializing from now on re-run detection.
+--- Reset detection: clear all discovered ingredients/merchants and stamp
+--- lastReset with the current game time so objects (re-)initializing from
+--- now on re-run detection into the clean slate.
 local function onResetDetection()
+    db.clearDiscovered()
     db.setLastReset(core.getGameTime())
 end
 

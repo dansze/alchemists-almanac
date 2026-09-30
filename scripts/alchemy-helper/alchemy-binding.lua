@@ -63,7 +63,7 @@ interface.Settings.registerGroup {
             key = SETTINGS.resetDetection,
             renderer = 'checkbox',
             name = 'Reset Detection',
-            description = 'One-shot action: force ingredients and merchants to be re-detected when they (re)initialize. Flips itself back off after use.',
+            description = 'One-shot action: clear all detected ingredients and merchants, then force re-detection when they (re)initialize. Flips itself back off after use.',
             default = false,
         },
     },
@@ -72,13 +72,15 @@ interface.Settings.registerGroup {
 -- "Reset Detection" is a button in disguise: toggling it on stamps the
 -- global last-reset game time (init.lua) and flips the checkbox back off.
 -- The write-back must be deferred: writing to a section from inside its own
--- subscribe callback throws (storage recursion guard).
+-- subscribe callback throws (storage recursion guard). OpenMW 0.52 has no
+-- real-time timers, so the flip-back waits for the first simulation tick —
+-- i.e. it lands as soon as the settings menu closes and the game resumes.
 local settingsSection = storage.playerSection(SETTINGS.group)
 settingsSection:subscribe(async:callback(function(_, key)
     if key ~= SETTINGS.resetDetection then return end
     if not settingsSection:get(SETTINGS.resetDetection) then return end
     core.sendGlobalEvent('AlchemyHelperResetDetection')
-    async:newUnsavableRealTimeTimer(0, function()
+    async:newUnsavableSimulationTimer(0, function()
         settingsSection:set(SETTINGS.resetDetection, false)
     end)
 end))

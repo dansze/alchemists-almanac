@@ -181,6 +181,14 @@ function M.getMerchants()
     return storage.globalSection(DISCOVERED_SECTION):get('merchants') or {}
 end
 
+--- Clear all discovered ingredients and merchants. GLOBAL context only.
+--- Used by the detection reset so re-detection starts from a clean slate.
+function M.clearDiscovered()
+    local s = discoveredSection()
+    s:set('ids', {})
+    s:set('merchants', {})
+end
+
 local function discoveredSet()
     local seen = {}
     for _, id in ipairs(M.getDiscovered()) do

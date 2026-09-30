@@ -212,4 +212,11 @@ assert(db.needsDetection(nil, 50), 'never handled -> detect regardless of reset'
 db.setLastReset('not-a-number') -- ignored
 assert(db.getLastReset() == 50, 'non-number stamp ignored')
 
+-- Reset clears discovered ingredients + merchants (clean slate for re-detection)
+db.clearDiscovered()
+assert(#db.getDiscovered() == 0, 'clearDiscovered empties ids')
+assert(next(db.getMerchants()) == nil, 'clearDiscovered empties merchants')
+db.discoverIngredient('a') -- re-detection after reset repopulates
+expectEqual(asSet(db.getDiscovered()), { a = true }, 're-detect after clear works')
+
 print('OK: all db interface checks passed')
