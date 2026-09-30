@@ -97,4 +97,11 @@ end
 input.registerActionHandler(SETTINGS.action, async:callback(handleUI))
 
 return {
+    eventHandlers = {
+        -- Esc (or any other mode close) from the engine side orphans the
+        -- window; close it when all modes are gone.
+        UiModeChanged = function(data)
+            alchemyUI.onUiModeChanged(data)
+        end,
+    },
 }

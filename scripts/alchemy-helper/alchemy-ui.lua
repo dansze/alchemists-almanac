@@ -39,7 +39,7 @@ end
 local ALIGN_CENTER = ui.ALIGNMENT and ui.ALIGNMENT.Center or nil
 
 -- Morrowind menu palette: gold headers/labels, warm white body, dim notes.
-local C_GOLD = util.color.rgb(1.0, 0.74, 0.12)
+local C_GOLD = util.color.rgb(0.76, 0.7, 0.5)
 local C_WHITE = util.color.rgb(0.96, 0.96, 0.90)
 local C_DIM = util.color.rgb(0.58, 0.58, 0.58)
 
@@ -760,9 +760,21 @@ function api.isVisible()
     return state.visible
 end
 
+--- Global event UiModeChanged {oldMode, newMode, arg}: fires on every mode
+-- stack change, including Esc closing a mode from the engine side. When all
+-- modes are gone our window is orphaned (visible but uninteractable) — close
+-- it. Our own show/hide never match: by the time their mode change event
+-- lands, state.visible has already been flipped.
+function api.onUiModeChanged(data)
+    if state.visible and data and data.newMode == nil then
+        api.hide()
+    end
+end
+
 return {
     show = api.show,
     hide = api.hide,
     destroy = api.destroy,
     isVisible = api.isVisible,
+    onUiModeChanged = api.onUiModeChanged,
 }
