@@ -51,17 +51,22 @@ local INNER_W = WIN_W - 2 * MARGIN -- 752
 local TITLE_Y = 10
 local TAB_Y, TAB_H = 48, 34
 local BODY_Y = 92
+local LABEL_H = 16
+local FIELD_H = 30
+local FIELD_GAP = 20 -- label top -> field top
 
 -- Ingredients tab.
-local ING_LIST_Y = BODY_Y + 38 -- 130 (search field + gap)
+local ING_FIELD_Y = BODY_Y + FIELD_GAP -- 112 (label at BODY_Y)
+local ING_LIST_Y = ING_FIELD_Y + FIELD_H + 8 -- 150
 local ING_PAGE_Y = WIN_H - 40 -- 580
 local ING_ROW_H = 44
-local ING_LIST_H = ING_PAGE_Y - ING_LIST_Y -- 450 -> 10 rows/page
+local ING_LIST_H = ING_PAGE_Y - ING_LIST_Y -- 430 -> 9 rows/page
 
 -- Shopping Planner tab.
-local PLAN_HDR_Y = BODY_Y + 30 -- 122
-local PLAN_FIELD_Y = PLAN_HDR_Y + 26 -- 148
-local PLAN_LIST_Y = PLAN_FIELD_Y + 36 -- 184
+local PLAN_HDR_Y = BODY_Y + 32 -- 124
+local PLAN_LABEL_Y = PLAN_HDR_Y + 28 -- 152
+local PLAN_FIELD_Y = PLAN_LABEL_Y + FIELD_GAP -- 172
+local PLAN_LIST_Y = PLAN_FIELD_Y + FIELD_H + 8 -- 210
 local PLAN_PAGE_Y = WIN_H - 36 -- 584
 local EFF_W = 350
 local MERCH_X = MARGIN + EFF_W + 24 -- 398
@@ -175,6 +180,40 @@ local function rowBox(x, y, w, h)
         t.template = tpl
     end
     return t
+end
+
+--- Labeled, bordered search field: gold label above a TextEdit wrapped in
+-- a thin-border box (the engine has no native bordered-field template).
+-- Typing only updates state; the list re-filters when focus leaves the
+-- field (rebuilding while focused would drop keyboard focus — lua_ui
+-- re-attaches TextEdit input widgets on every update).
+local function searchField(x, y, w, label, getState, setState)
+    local box = rowBox(x, y + FIELD_GAP, w, FIELD_H)
+    box.content = ui.content{
+        {
+            type = ui.TYPE.TextEdit,
+            props = {
+                position = v2(2, 2),
+                size = v2(w - 6, FIELD_H - 6),
+                autoSize = false,
+                text = getState(),
+                textSize = 15,
+                textColor = C_WHITE,
+            },
+            events = {
+                textChanged = async:callback(function(t)
+                    setState(t or '')
+                end),
+                focusLoss = async:callback(function()
+                    rebuild()
+                end),
+            },
+        },
+    }
+    return {
+        text(label, { x = x, y = y, w = 200, h = LABEL_H, size = 14, color = C_GOLD }),
+        box,
+    }
 end
 
 local function pageCount(n, perPage)
@@ -322,43 +361,23 @@ local function ingredientsContent()
 
     local pages = pageCount(#list, perPage)
     local page = math.floor(state.ingOffset / perPage) + 1
-    return {
-        -- Search field: typing only updates state; the list re-filters when
-        -- focus leaves (rebuilding while focused would drop keyboard focus).
-        {
-            type = ui.TYPE.TextEdit,
-            props = {
-                position = v2(MARGIN, BODY_Y),
-                size = v2(INNER_W, 30),
-                autoSize = false,
-                text = state.ingSearch,
-                textSize = 16,
-                textColor = C_WHITE,
-            },
-            events = {
-                textChanged = async:callback(function(t)
-                    state.ingSearch = t or ''
-                end),
-                focusLoss = async:callback(function()
-                    async:newUnsavableRealTimeTimer(0, function()
-                        if state.visible then
-                            rebuild()
-                        end
-                    end)
-                end),
-            },
-        },
-        wheelArea,
-        button(MARGIN, ING_PAGE_Y, 90, 32, 'PREVIOUS', function()
-            state.ingOffset = clampOffset(state.ingOffset - perPage, #list, perPage)
-            rebuild()
-        end, page > 1),
-        text('Page ' .. page .. ' of ' .. pages, { x = MARGIN + 100, y = ING_PAGE_Y + 5, w = INNER_W - 290, h = 24, size = 15, color = C_GOLD }),
-        button(WIN_W - MARGIN - 90, ING_PAGE_Y, 90, 32, 'NEXT', function()
-            state.ingOffset = clampOffset(state.ingOffset + perPage, #list, perPage)
-            rebuild()
-        end, page < pages),
-    }
+    local out = {}
+    for _, item in ipairs(searchField(MARGIN, BODY_Y, INNER_W, 'SEARCH',
+        function() return state.ingSearch end,
+        function(t) state.ingSearch = t end)) do
+        out[#out + 1] = item
+    end
+    out[#out + 1] = wheelArea
+    out[#out + 1] = button(MARGIN, ING_PAGE_Y, 90, 32, 'PREVIOUS', function()
+        state.ingOffset = clampOffset(state.ingOffset - perPage, #list, perPage)
+        rebuild()
+    end, page > 1)
+    out[#out + 1] = text('Page ' .. page .. ' of ' .. pages, { x = MARGIN + 100, y = ING_PAGE_Y + 5, w = INNER_W - 290, h = 24, size = 15, color = C_GOLD })
+    out[#out + 1] = button(WIN_W - MARGIN - 90, ING_PAGE_Y, 90, 32, 'NEXT', function()
+        state.ingOffset = clampOffset(state.ingOffset + perPage, #list, perPage)
+        rebuild()
+    end, page < pages)
+    return out
 end
 
 -- ---------------------------------------------------------------------------
@@ -442,74 +461,40 @@ local function plannerContent()
     local merchPages = pageCount(#merchants, merchPerPage)
     local merchPage = math.floor(state.merchOffset / merchPerPage) + 1
 
-    return {
-        -- Strict Mode toggle (Squire-style [X] marker; session-only).
-        {
-            type = ui.TYPE.Text,
-            props = {
-                position = v2(MARGIN, BODY_Y),
-                size = v2(220, 24),
-                autoSize = false,
-                text = (state.strict and '[X] ' or '[ ] ') .. 'STRICT MODE',
-                textSize = 16,
-                textColor = state.strict and C_GOLD or C_DIM,
-                textShadow = true,
-            },
-            events = {
-                mouseClick = async:callback(function()
-                    state.strict = not state.strict
-                    rebuild()
-                end),
-            },
+    local out = {}
+    -- Strict Mode toggle (Squire-style [X] marker; session-only).
+    out[#out + 1] = {
+        type = ui.TYPE.Text,
+        props = {
+            position = v2(MARGIN, BODY_Y),
+            size = v2(220, 24),
+            autoSize = false,
+            text = (state.strict and '[X] ' or '[ ] ') .. 'STRICT MODE',
+            textSize = 16,
+            textColor = state.strict and C_GOLD or C_DIM,
+            textShadow = true,
         },
-        text('EFFECTS', { x = MARGIN, y = PLAN_HDR_Y, w = EFF_W, h = 24, size = 18, color = C_GOLD }),
-        text('MERCHANTS', { x = MERCH_X, y = PLAN_HDR_Y, w = MERCH_W, h = 24, size = 18, color = C_GOLD }),
-        {
-            type = ui.TYPE.TextEdit,
-            props = {
-                position = v2(MARGIN, PLAN_FIELD_Y),
-                size = v2(EFF_W, 28),
-                autoSize = false,
-                text = state.effSearch,
-                textSize = 15,
-                textColor = C_WHITE,
-            },
-            events = {
-                textChanged = async:callback(function(t)
-                    state.effSearch = t or ''
-                end),
-                focusLoss = async:callback(function()
-                    async:newUnsavableRealTimeTimer(0, function()
-                        if state.visible then
-                            rebuild()
-                        end
-                    end)
-                end),
-            },
+        events = {
+            mouseClick = async:callback(function()
+                state.strict = not state.strict
+                rebuild()
+            end),
         },
-        {
-            type = ui.TYPE.TextEdit,
-            props = {
-                position = v2(MERCH_X, PLAN_FIELD_Y),
-                size = v2(260, 28),
-                autoSize = false,
-                text = state.merchFilter,
-                textSize = 15,
-                textColor = C_WHITE,
-            },
-            events = {
-                textChanged = async:callback(function(t)
-                    state.merchFilter = t or ''
-                end),
-                focusLoss = async:callback(function()
-                    async:newUnsavableRealTimeTimer(0, function()
-                        if state.visible then
-                            rebuild()
-                        end
-                    end)
-                end),
-            },
-        },
+    }
+    out[#out + 1] = text('EFFECTS', { x = MARGIN, y = PLAN_HDR_Y, w = EFF_W, h = 24, size = 18, color = C_GOLD })
+    out[#out + 1] = text('MERCHANTS', { x = MERCH_X, y = PLAN_HDR_Y, w = MERCH_W, h = 24, size = 18, color = C_GOLD })
+    for _, item in ipairs(searchField(MARGIN, PLAN_LABEL_Y, EFF_W, 'FILTER EFFECTS',
+        function() return state.effSearch end,
+        function(t) state.effSearch = t end)) do
+        out[#out + 1] = item
+    end
+    for _, item in ipairs(searchField(MERCH_X, PLAN_LABEL_Y, 260, 'FILTER MERCHANTS',
+        function() return state.merchFilter end,
+        function(t) state.merchFilter = t end)) do
+        out[#out + 1] = item
+    end
+
+    local rest = {
         button(MERCH_X + 268, PLAN_FIELD_Y, 52, 28, 'NAME', function()
             state.merchSort = 'name'
             rebuild()
@@ -561,6 +546,10 @@ local function plannerContent()
             rebuild()
         end, merchPage < merchPages),
     }
+    for _, item in ipairs(rest) do
+        out[#out + 1] = item
+    end
+    return out
 end
 
 -- ---------------------------------------------------------------------------
@@ -593,29 +582,41 @@ local function buildContent()
     return c
 end
 
+-- Reentrancy guard: destroying the old tree can fire focusLoss on its
+-- focused TextEdit, which re-enters rebuild() mid-destroy (Element::destroy
+-- is not reentrant). The state change that triggered the rebuild already
+-- happened, so skipping the nested pass is correct.
+local rebuilding = false
 function rebuild()
-    if not state.visible then
+    if not state.visible or rebuilding then
         return
     end
-    if element then
-        element:destroy()
-        element = nil
+    rebuilding = true
+    local ok, err = pcall(function()
+        if element then
+            element:destroy()
+            element = nil
+        end
+        local t = {
+            layer = 'Windows',
+            type = ui.TYPE.Container,
+            props = {
+                relativePosition = v2(0.5, 0.5),
+                anchor = v2(0.5, 0.5),
+                size = v2(WIN_W, WIN_H),
+            },
+            content = ui.content(buildContent()),
+        }
+        local tpl = templates().boxTransparentThick or templates().boxThick
+        if tpl then
+            t.template = tpl
+        end
+        element = ui.create(t)
+    end)
+    rebuilding = false
+    if not ok then
+        error(err, 0)
     end
-    local t = {
-        layer = 'Windows',
-        type = ui.TYPE.Container,
-        props = {
-            relativePosition = v2(0.5, 0.5),
-            anchor = v2(0.5, 0.5),
-            size = v2(WIN_W, WIN_H),
-        },
-        content = ui.content(buildContent()),
-    }
-    local tpl = templates().boxTransparentThick or templates().boxThick
-    if tpl then
-        t.template = tpl
-    end
-    element = ui.create(t)
 end
 
 -- ---------------------------------------------------------------------------

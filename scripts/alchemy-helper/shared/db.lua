@@ -11,11 +11,10 @@
 --                           keys: ingredientEffects, effectIngredients,
 --                                 baseEffectIngredients, ingredients
 --                                 (id -> { name, icon } display info),
---                                 effectNames / targetNames (runtime-built
---                                 RefId -> display name maps; no engine API
---                                 exists for MGEF names, and mod LOAD scripts
---                                 can add effects, so the maps are generated
---                                 from whatever records exist at init time),
+--                                 effectNames / targetNames (RefId -> display
+--                                 name maps: effect names collected from each
+--                                 record's localized MagicEffect name, target
+--                                 names static + generated fallback),
 --                                 lastReset (game-time seconds of the last
 --                                 detection reset; 0/nil = never)
 --   AlchemyHelperDiscovered Persistent lifetime — keys:
@@ -29,6 +28,7 @@
 -- contexts may modify sections).
 
 local storage = require('openmw.storage')
+local staticNames = require('scripts.alchemy-helper.shared.data.effect-names')
 
 local M = {}
 
@@ -299,12 +299,18 @@ function M.displayName(id)
     return name
 end
 
---- Build runtime name maps from ingredient records: every effect ID and
---- attribute/skill target seen on any record gets a generated display name.
---- Mod-added MGEFs are covered without any static table.
+--- Build name maps from ingredient records. Effect display names come
+--- straight from the engine: each effect params entry references its
+--- MagicEffect record (eff.effect), whose .name is the localized display
+--- name — mod-added MGEFs included. IDs whose effect record or name is
+--- missing fall back to a generated CamelCase name. Attribute/skill target
+--- names come from the static table (no engine API for them), with
+--- generation as fallback.
 function M.buildEffectNames(records)
     local effectNames = {}
     local targetNames = {}
+    for k, v in pairs(staticNames.attributes) do targetNames[k] = v end
+    for k, v in pairs(staticNames.skills) do targetNames[k] = v end
     -- No {attr, skill} table: a nil first entry would hide the second from
     -- ipairs.
     local function addTarget(t)
@@ -317,7 +323,12 @@ function M.buildEffectNames(records)
             for _, eff in ipairs(ing.effects) do
                 local effId = eff and eff.id
                 if type(effId) == 'string' and effId ~= '' and not effectNames[effId] then
-                    effectNames[effId] = M.displayName(effId)
+                    local name = nil
+                    local me = eff.effect
+                    if me and type(me.name) == 'string' and me.name ~= '' then
+                        name = me.name
+                    end
+                    effectNames[effId] = name or M.displayName(effId)
                 end
                 addTarget(eff and eff.affectedAttribute)
                 addTarget(eff and eff.affectedSkill)
@@ -334,13 +345,17 @@ function M.storeEffectNames(names)
     s:set('targetNames', names and names.targetNames or {})
 end
 
---- The stored name maps { effectNames, targetNames } (copies).
+--- Name maps { effectNames, targetNames }: the stored (record-built) maps
+--- with the static attribute/skill names merged on top.
 function M.getEffectNames()
     local idx = readIndex()
-    return {
-        effectNames = idx.effectNames or {},
-        targetNames = idx.targetNames or {},
-    }
+    local effectNames = {}
+    for k, v in pairs(idx.effectNames or {}) do effectNames[k] = v end
+    local targetNames = {}
+    for k, v in pairs(idx.targetNames or {}) do targetNames[k] = v end
+    for k, v in pairs(staticNames.attributes) do targetNames[k] = v end
+    for k, v in pairs(staticNames.skills) do targetNames[k] = v end
+    return { effectNames = effectNames, targetNames = targetNames }
 end
 
 --- Display name for a compound effect key "effId[~attribute][~skill]" using
@@ -357,7 +372,7 @@ function M.formatEffectName(compoundKey, names)
     for part in compoundKey:gmatch('[^~]+') do
         parts[#parts + 1] = part
     end
-    effId, attr, skill = parts[1], parts[2], parts[3]
+    local effId, attr, skill = parts[1], parts[2], parts[3]
     local name = effectNames[effId] or M.displayName(effId)
     local target = nil
     if skill and skill ~= '' then

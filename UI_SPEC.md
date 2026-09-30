@@ -42,10 +42,11 @@ The merchant list should be sortable and filterable by both Actor and Location n
 
 - Styling follows the native game menus and other Lua mods (Squire spell shop): `boxTransparentThick` window frame, gold/white/dim palette, shadowed text at menu font sizes, absolute positioning inside one window container.
 - The whole window is rebuilt on every change (destroy + `ui.create`). In-place `element:update()` calls are avoided because lua_ui re-attaches TextEdit input widgets on every update, which drops keyboard focus. While a search field is focused, typing only mutates state; the list re-filters when focus leaves the field.
+- Search fields are a gold label above a TextEdit wrapped in a thin-border (`boxTransparent`) box — the engine ships no bordered-field template. The rebuild triggered by `focusLoss` runs directly (no deferred timer: OpenMW 0.52 has no `newUnsavableRealTimeTimer`); a reentrancy guard skips nested rebuilds when destroying the old tree fires focus-loss on its focused field.
 
 ## Notes
 
-- Effect display names are generated at runtime by splitting CamelCase RefIds into words (e.g. `WeaknessToFire` → "Weakness to Fire"), built from the effects present on ingredient records at init — so mod-added MGEFs get names without any static table. Unmapped attribute/skill targets fall back to showing the raw ID.
+- Effect display names are collected at init from the engine itself: each effect entry on an ingredient record references its MagicEffect record (`eff.effect`), whose `.name` is the localized display name — mod-added MGEFs included. IDs whose effect record or name is missing fall back to a generated CamelCase-split name (e.g. `WeaknessToFire` → "Weakness to Fire"). Attribute/skill target names come from a small static table (`shared/data/effect-names.lua`, GMST-sourced) because the engine exposes no API for them.
 - The only icons used are ingredient record icons; effects are displayed as text.
 - List data is refreshed when the window opens and on tab switch; it is not live-updated while the window stays open.
 - "Restocking supply" means ingredients a merchant holds at a negative count in their inventory — what they sell and restock.
