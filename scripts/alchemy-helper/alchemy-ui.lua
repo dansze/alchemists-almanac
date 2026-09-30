@@ -10,11 +10,12 @@
 -- shop): boxTransparentThick window frame, gold/white/dim palette, shadowed
 -- text at menu font sizes, absolute positioning inside one window container.
 --
--- The whole window is rebuilt on every change (destroy + ui.create) — the
--- same pattern as the Squire shop. In-place element:update() calls are
--- avoided because lua_ui re-attaches TextEdit input widgets on every update,
--- which drops keyboard focus; while a search field is focused, typing only
--- mutates state and the list is re-filtered when focus leaves the field.
+-- The window is two elements (destroy + ui.create rebuilds, Squire-style):
+-- a frame element (chrome, labels, search fields) and a list-region element
+-- (rows + page bar). In-place element:update() calls are avoided because
+-- lua_ui re-attaches TextEdit input widgets on every update, which drops
+-- keyboard focus. Live filtering rebuilds only the list element on each
+-- keystroke, so a focused search field in the frame keeps typing focus.
 
 local ui = require('openmw.ui')
 local async = require('openmw.async')
@@ -74,6 +75,12 @@ local MERCH_W = WIN_W - MARGIN - MERCH_X -- 378
 local EFF_ROW_H = 24 -- 16 rows/page
 local MERCH_ROW_H = 60 -- 6 rows/page
 
+-- Vertical bands (window-local y) covered by the list element. No interactive
+-- frame widget sits inside a band, so the list element may consume clicks in
+-- its empty areas harmlessly.
+local ING_REGION_TOP, ING_REGION_BOT = ING_LIST_Y, ING_PAGE_Y + 32
+local PLAN_REGION_TOP, PLAN_REGION_BOT = PLAN_LIST_Y, PLAN_PAGE_Y + 30
+
 --- Immersive Mode: filter UI to discovered ingredients. Read live so an
 -- in-game settings toggle applies on the next rebuild; nil (unset) = on.
 local function immersiveMode()
@@ -101,12 +108,18 @@ local state = {
     merchOffset = 0,
 }
 
---- UiElement from ui.create; nil while the window is closed.
-local element = nil
+--- UiElements from ui.create; nil while the window is closed. The frame
+-- (chrome, labels, search fields) and the list region are separate
+-- elements: live filtering rebuilds only the list element, so a focused TextEdit in
+-- the frame keeps keyboard focus (destroying/updating its own tree would
+-- detach the MyGUI EditBox and drop focus).
+local frameEl = nil
+local listEl = nil
 
--- Forward declaration: interaction callbacks reference rebuild() before its
--- definition below (closures resolve lexically at compile time).
+-- Forward declarations: interaction callbacks reference these before their
+-- definitions below (closures resolve lexically at compile time).
 local rebuild
+local rebuildList
 
 -- ---------------------------------------------------------------------------
 -- Layout helpers (absolute positioning, Squire-style)
@@ -184,9 +197,8 @@ end
 
 --- Labeled, bordered search field: gold label above a TextEdit wrapped in
 -- a thin-border box (the engine has no native bordered-field template).
--- Typing only updates state; the list re-filters when focus leaves the
--- field (rebuilding while focused would drop keyboard focus — lua_ui
--- re-attaches TextEdit input widgets on every update).
+-- Typing re-filters live on every keystroke: only the list element is
+-- rebuilt, so this TextEdit (in the frame element) keeps keyboard focus.
 local function searchField(x, y, w, label, getState, setState)
     local box = rowBox(x, y + FIELD_GAP, w, FIELD_H)
     box.content = ui.content{
@@ -203,9 +215,7 @@ local function searchField(x, y, w, label, getState, setState)
             events = {
                 textChanged = async:callback(function(t)
                     setState(t or '')
-                end),
-                focusLoss = async:callback(function()
-                    rebuild()
+                    rebuildList()
                 end),
             },
         },
@@ -233,10 +243,19 @@ local function ingredientList()
     local list = db.getIngredientList(immersiveMode())
     local q = state.ingSearch:lower()
     if q ~= '' then
+        local names = db.getEffectNames()
         local filtered = {}
         for _, item in ipairs(list) do
             if (item.name or ''):lower():find(q, 1, true) then
                 filtered[#filtered + 1] = item
+            else
+                -- Also match any effect display name on the ingredient.
+                for _, key in ipairs(item.effects or {}) do
+                    if db.formatEffectName(key, names):lower():find(q, 1, true) then
+                        filtered[#filtered + 1] = item
+                        break
+                    end
+                end
             end
         end
         list = filtered
@@ -331,7 +350,7 @@ local function ingredientRow(item, y, counts, names)
     return box
 end
 
-local function ingredientsContent()
+local function buildIngredientsList()
     local perPage = math.max(1, math.floor(ING_LIST_H / ING_ROW_H))
     local list = ingredientList()
     state.ingOffset = clampOffset(state.ingOffset, #list, perPage)
@@ -346,14 +365,16 @@ local function ingredientsContent()
         rows[1] = text('(none)', { x = 8, y = 8, w = 200, h = 20, size = 16, color = C_DIM })
     end
 
+    -- Child coordinates are relative to the list element's origin
+    -- (window-local y = ING_REGION_TOP).
     local wheelArea = {
         type = ui.TYPE.Container,
-        props = { position = v2(MARGIN, ING_LIST_Y), size = v2(INNER_W, ING_LIST_H) },
+        props = { position = v2(MARGIN, 0), size = v2(INNER_W, ING_LIST_H) },
         events = {
             mouseWheel = async:callback(function(e)
                 state.ingOffset = clampOffset(
                     state.ingOffset + (e and e.delta and e.delta.y > 0 and -1 or 1), #list, perPage)
-                rebuild()
+                rebuildList()
             end),
         },
         content = ui.content(rows),
@@ -361,21 +382,16 @@ local function ingredientsContent()
 
     local pages = pageCount(#list, perPage)
     local page = math.floor(state.ingOffset / perPage) + 1
-    local out = {}
-    for _, item in ipairs(searchField(MARGIN, BODY_Y, INNER_W, 'SEARCH',
-        function() return state.ingSearch end,
-        function(t) state.ingSearch = t end)) do
-        out[#out + 1] = item
-    end
-    out[#out + 1] = wheelArea
-    out[#out + 1] = button(MARGIN, ING_PAGE_Y, 90, 32, 'PREVIOUS', function()
+    local out = { wheelArea }
+    local pageY = ING_PAGE_Y - ING_LIST_Y
+    out[#out + 1] = button(MARGIN, pageY, 90, 32, 'PREVIOUS', function()
         state.ingOffset = clampOffset(state.ingOffset - perPage, #list, perPage)
-        rebuild()
+        rebuildList()
     end, page > 1)
-    out[#out + 1] = text('Page ' .. page .. ' of ' .. pages, { x = MARGIN + 100, y = ING_PAGE_Y + 5, w = INNER_W - 290, h = 24, size = 15, color = C_GOLD })
-    out[#out + 1] = button(WIN_W - MARGIN - 90, ING_PAGE_Y, 90, 32, 'NEXT', function()
+    out[#out + 1] = text('Page ' .. page .. ' of ' .. pages, { x = MARGIN + 100, y = pageY + 5, w = INNER_W - 290, h = 24, size = 15, color = C_GOLD })
+    out[#out + 1] = button(WIN_W - MARGIN - 90, pageY, 90, 32, 'NEXT', function()
         state.ingOffset = clampOffset(state.ingOffset + perPage, #list, perPage)
-        rebuild()
+        rebuildList()
     end, page < pages)
     return out
 end
@@ -404,7 +420,7 @@ local function effectRow(item, y)
             else
                 state.selectedEffects[item.key] = true
             end
-            rebuild()
+            rebuildList() -- rows + merchant list both live in the list element
         end),
     }
     -- propagateEvents stays on: the wheel handler lives on the list container
@@ -432,7 +448,7 @@ local function merchantRow(m, y)
     return box
 end
 
-local function plannerContent()
+local function buildPlannerList()
     local effPerPage = math.max(1, math.floor((PLAN_PAGE_Y - PLAN_LIST_Y) / EFF_ROW_H))
     local merchPerPage = math.max(1, math.floor((PLAN_PAGE_Y - PLAN_LIST_Y) / MERCH_ROW_H))
     local effects = effectList()
@@ -461,99 +477,58 @@ local function plannerContent()
     local merchPages = pageCount(#merchants, merchPerPage)
     local merchPage = math.floor(state.merchOffset / merchPerPage) + 1
 
-    local out = {}
-    -- Strict Mode toggle (Squire-style [X] marker; session-only).
-    out[#out + 1] = {
-        type = ui.TYPE.Text,
-        props = {
-            position = v2(MARGIN, BODY_Y),
-            size = v2(220, 24),
-            autoSize = false,
-            text = (state.strict and '[X] ' or '[ ] ') .. 'STRICT MODE',
-            textSize = 16,
-            textColor = state.strict and C_GOLD or C_DIM,
-            textShadow = true,
-        },
-        events = {
-            mouseClick = async:callback(function()
-                state.strict = not state.strict
-                rebuild()
-            end),
-        },
-    }
-    out[#out + 1] = text('EFFECTS', { x = MARGIN, y = PLAN_HDR_Y, w = EFF_W, h = 24, size = 18, color = C_GOLD })
-    out[#out + 1] = text('MERCHANTS', { x = MERCH_X, y = PLAN_HDR_Y, w = MERCH_W, h = 24, size = 18, color = C_GOLD })
-    for _, item in ipairs(searchField(MARGIN, PLAN_LABEL_Y, EFF_W, 'FILTER EFFECTS',
-        function() return state.effSearch end,
-        function(t) state.effSearch = t end)) do
-        out[#out + 1] = item
-    end
-    for _, item in ipairs(searchField(MERCH_X, PLAN_LABEL_Y, 260, 'FILTER MERCHANTS',
-        function() return state.merchFilter end,
-        function(t) state.merchFilter = t end)) do
-        out[#out + 1] = item
-    end
-
-    local rest = {
-        button(MERCH_X + 268, PLAN_FIELD_Y, 52, 28, 'NAME', function()
-            state.merchSort = 'name'
-            rebuild()
-        end, true, state.merchSort == 'name' and C_GOLD or C_DIM),
-        button(MERCH_X + 326, PLAN_FIELD_Y, 52, 28, 'LOC', function()
-            state.merchSort = 'location'
-            rebuild()
-        end, true, state.merchSort == 'location' and C_GOLD or C_DIM),
+    -- Child coordinates are relative to the list element's origin
+    -- (window-local y = PLAN_REGION_TOP).
+    local pageY = PLAN_PAGE_Y - PLAN_LIST_Y
+    return {
         {
             type = ui.TYPE.Container,
-            props = { position = v2(MARGIN, PLAN_LIST_Y), size = v2(EFF_W, PLAN_PAGE_Y - PLAN_LIST_Y) },
+            props = { position = v2(MARGIN, 0), size = v2(EFF_W, PLAN_PAGE_Y - PLAN_LIST_Y) },
             events = {
                 mouseWheel = async:callback(function(e)
                     state.effOffset = clampOffset(
                         state.effOffset + (e and e.delta and e.delta.y > 0 and -1 or 1), #effects, effPerPage)
-                    rebuild()
+                    rebuildList()
                 end),
             },
             content = ui.content(effRows),
         },
         {
             type = ui.TYPE.Container,
-            props = { position = v2(MERCH_X, PLAN_LIST_Y), size = v2(MERCH_W, PLAN_PAGE_Y - PLAN_LIST_Y) },
+            props = { position = v2(MERCH_X, 0), size = v2(MERCH_W, PLAN_PAGE_Y - PLAN_LIST_Y) },
             events = {
                 mouseWheel = async:callback(function(e)
                     state.merchOffset = clampOffset(
                         state.merchOffset + (e and e.delta and e.delta.y > 0 and -1 or 1), #merchants, merchPerPage)
-                    rebuild()
+                    rebuildList()
                 end),
             },
             content = ui.content(merchRows),
         },
-        button(MARGIN, PLAN_PAGE_Y, 70, 30, '<', function()
+        button(MARGIN, pageY, 70, 30, '<', function()
             state.effOffset = clampOffset(state.effOffset - effPerPage, #effects, effPerPage)
-            rebuild()
+            rebuildList()
         end, effPage > 1),
-        text('Page ' .. effPage .. ' of ' .. effPages, { x = MARGIN + 76, y = PLAN_PAGE_Y + 5, w = 180, h = 22, size = 14, color = C_GOLD }),
-        button(MARGIN + 270, PLAN_PAGE_Y, 70, 30, '>', function()
+        text('Page ' .. effPage .. ' of ' .. effPages, { x = MARGIN + 76, y = pageY + 5, w = 180, h = 22, size = 14, color = C_GOLD }),
+        button(MARGIN + 270, pageY, 70, 30, '>', function()
             state.effOffset = clampOffset(state.effOffset + effPerPage, #effects, effPerPage)
-            rebuild()
+            rebuildList()
         end, effPage < effPages),
-        button(MERCH_X, PLAN_PAGE_Y, 70, 30, '<', function()
+        button(MERCH_X, pageY, 70, 30, '<', function()
             state.merchOffset = clampOffset(state.merchOffset - merchPerPage, #merchants, merchPerPage)
-            rebuild()
+            rebuildList()
         end, merchPage > 1),
-        text('Page ' .. merchPage .. ' of ' .. merchPages, { x = MERCH_X + 76, y = PLAN_PAGE_Y + 5, w = 180, h = 22, size = 14, color = C_GOLD }),
-        button(MERCH_X + 270, PLAN_PAGE_Y, 70, 30, '>', function()
+        text('Page ' .. merchPage .. ' of ' .. merchPages, { x = MERCH_X + 76, y = pageY + 5, w = 180, h = 22, size = 14, color = C_GOLD }),
+        button(MERCH_X + 270, pageY, 70, 30, '>', function()
             state.merchOffset = clampOffset(state.merchOffset + merchPerPage, #merchants, merchPerPage)
-            rebuild()
+            rebuildList()
         end, merchPage < merchPages),
     }
-    for _, item in ipairs(rest) do
-        out[#out + 1] = item
-    end
-    return out
 end
 
 -- ---------------------------------------------------------------------------
--- Window build (full rebuild on every change)
+-- Frame build: chrome, labels and search fields. Rebuilt only on open and
+-- tab switch — never while a search field is focused.
 -- ---------------------------------------------------------------------------
 
 local function tabButton(x, w, label, name)
@@ -566,7 +541,7 @@ local function tabButton(x, w, label, name)
     end, true, active and C_GOLD or C_DIM)
 end
 
-local function buildContent()
+local function buildFrameContent()
     local c = {
         text('ALCHEMIST\'S ALMANAC', { x = MARGIN, y = TITLE_Y, w = 560, h = 30, size = 22, color = C_GOLD }),
         button(WIN_W - MARGIN - 90, TITLE_Y + 2, 90, 32, 'CLOSE', function()
@@ -575,17 +550,111 @@ local function buildContent()
         tabButton(MARGIN, 250, 'INGREDIENTS', 'ingredients'),
         tabButton(MARGIN + 258, 250, 'SHOPPING PLANNER', 'planner'),
     }
-    local body = (state.tab == 'ingredients') and ingredientsContent() or plannerContent()
-    for _, item in ipairs(body) do
-        c[#c + 1] = item
+    if state.tab == 'ingredients' then
+        for _, item in ipairs(searchField(MARGIN, BODY_Y, INNER_W, 'SEARCH',
+            function() return state.ingSearch end,
+            function(t) state.ingSearch = t end)) do
+            c[#c + 1] = item
+        end
+    else
+        -- Strict Mode toggle (Squire-style [X] marker; session-only).
+        c[#c + 1] = {
+            type = ui.TYPE.Text,
+            props = {
+                position = v2(MARGIN, BODY_Y),
+                size = v2(220, 24),
+                autoSize = false,
+                text = (state.strict and '[X] ' or '[ ] ') .. 'STRICT MODE',
+                textSize = 16,
+                textColor = state.strict and C_GOLD or C_DIM,
+                textShadow = true,
+            },
+            events = {
+                mouseClick = async:callback(function()
+                    state.strict = not state.strict
+                    rebuild()
+                end),
+            },
+        }
+        c[#c + 1] = text('EFFECTS', { x = MARGIN, y = PLAN_HDR_Y, w = EFF_W, h = 24, size = 18, color = C_GOLD })
+        c[#c + 1] = text('MERCHANTS', { x = MERCH_X, y = PLAN_HDR_Y, w = MERCH_W, h = 24, size = 18, color = C_GOLD })
+        for _, item in ipairs(searchField(MARGIN, PLAN_LABEL_Y, EFF_W, 'FILTER EFFECTS',
+            function() return state.effSearch end,
+            function(t) state.effSearch = t end)) do
+            c[#c + 1] = item
+        end
+        for _, item in ipairs(searchField(MERCH_X, PLAN_LABEL_Y, 260, 'FILTER MERCHANTS',
+            function() return state.merchFilter end,
+            function(t) state.merchFilter = t end)) do
+            c[#c + 1] = item
+        end
+        c[#c + 1] = button(MERCH_X + 268, PLAN_FIELD_Y, 52, 28, 'NAME', function()
+            state.merchSort = 'name'
+            rebuild()
+        end, true, state.merchSort == 'name' and C_GOLD or C_DIM)
+        c[#c + 1] = button(MERCH_X + 326, PLAN_FIELD_Y, 52, 28, 'LOC', function()
+            state.merchSort = 'location'
+            rebuild()
+        end, true, state.merchSort == 'location' and C_GOLD or C_DIM)
     end
+    -- Invisible placeholder occupying the list band. The frame window sizes
+    -- from its content; without this the empty band collapses and the frame
+    -- renders smaller than the list element overlaid on it. Slot coordinates
+    -- are inset 4px (thick border) from the window, so offset by -4 to make
+    -- the placeholder's window-space extent match the list element exactly.
+    local top, bot = state.tab == 'ingredients'
+        and ING_REGION_TOP or PLAN_REGION_TOP,
+        state.tab == 'ingredients' and ING_REGION_BOT or PLAN_REGION_BOT
+    c[#c + 1] = {
+        type = ui.TYPE.Widget,
+        props = { position = v2(-4, top - 4), size = v2(WIN_W + 8, bot - top) },
+    }
     return c
 end
 
--- Reentrancy guard: destroying the old tree can fire focusLoss on its
--- focused TextEdit, which re-enters rebuild() mid-destroy (Element::destroy
--- is not reentrant). The state change that triggered the rebuild already
--- happened, so skipping the nested pass is correct.
+--- Rebuild only the list element (rows + page bar). Runs on every
+-- keystroke, row click and page change; the frame element — including any
+-- focused TextEdit — is left untouched so typing keeps keyboard focus.
+local rebuildingList = false
+function rebuildList()
+    if not state.visible or rebuildingList then
+        return
+    end
+    rebuildingList = true
+    local ok, err = pcall(function()
+        if listEl then
+            listEl:destroy()
+            listEl = nil
+        end
+        -- The band for the active tab (window-local y), full window width.
+        local top, bot = state.tab == 'ingredients'
+            and ING_REGION_TOP or PLAN_REGION_TOP,
+            state.tab == 'ingredients' and ING_REGION_BOT or PLAN_REGION_BOT
+        local regionH = bot - top
+        -- Aligned with the frame using relativePosition + anchor only (the
+        -- same mechanism that centers the frame — no absolute position, which
+        -- interacts unreliably with size on root elements). The band spans the
+        -- full window width and is centered like the frame, so anchor_x = 0.5;
+        -- anchor_y shifts it down so its top-left lands at window-local (0, top).
+        listEl = ui.create({
+            layer = 'Windows',
+            type = ui.TYPE.Container,
+            props = {
+                relativePosition = v2(0.5, 0.5),
+                anchor = v2(0.5, (WIN_H / 2 - top) / regionH),
+                size = v2(WIN_W, regionH),
+            },
+            content = ui.content(state.tab == 'ingredients' and buildIngredientsList() or buildPlannerList()),
+        })
+    end)
+    rebuildingList = false
+    if not ok then
+        error(err, 0)
+    end
+end
+
+-- Full rebuild: frame + list. Used on open and tab switch. Reentrancy guard:
+-- a nested pass would destroy/create elements mid-flight.
 local rebuilding = false
 function rebuild()
     if not state.visible or rebuilding then
@@ -593,9 +662,9 @@ function rebuild()
     end
     rebuilding = true
     local ok, err = pcall(function()
-        if element then
-            element:destroy()
-            element = nil
+        if frameEl then
+            frameEl:destroy()
+            frameEl = nil
         end
         local t = {
             layer = 'Windows',
@@ -605,13 +674,14 @@ function rebuild()
                 anchor = v2(0.5, 0.5),
                 size = v2(WIN_W, WIN_H),
             },
-            content = ui.content(buildContent()),
+            content = ui.content(buildFrameContent()),
         }
         local tpl = templates().boxTransparentThick or templates().boxThick
         if tpl then
             t.template = tpl
         end
-        element = ui.create(t)
+        frameEl = ui.create(t)
+        rebuildList()
     end)
     rebuilding = false
     if not ok then
@@ -671,9 +741,13 @@ function api.hide()
         return
     end
     state.visible = false
-    if element then
-        element:destroy()
-        element = nil
+    if frameEl then
+        frameEl:destroy()
+        frameEl = nil
+    end
+    if listEl then
+        listEl:destroy()
+        listEl = nil
     end
     reconcilePause()
 end

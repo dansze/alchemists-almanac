@@ -41,8 +41,10 @@ The merchant list should be sortable and filterable by both Actor and Location n
 ## Implementation Notes (UI)
 
 - Styling follows the native game menus and other Lua mods (Squire spell shop): `boxTransparentThick` window frame, gold/white/dim palette, shadowed text at menu font sizes, absolute positioning inside one window container.
-- The whole window is rebuilt on every change (destroy + `ui.create`). In-place `element:update()` calls are avoided because lua_ui re-attaches TextEdit input widgets on every update, which drops keyboard focus. While a search field is focused, typing only mutates state; the list re-filters when focus leaves the field.
-- Search fields are a gold label above a TextEdit wrapped in a thin-border (`boxTransparent`) box — the engine ships no bordered-field template. The rebuild triggered by `focusLoss` runs directly (no deferred timer: OpenMW 0.52 has no `newUnsavableRealTimeTimer`); a reentrancy guard skips nested rebuilds when destroying the old tree fires focus-loss on its focused field.
+- The window is two elements, both rebuilt by destroy + `ui.create` (Squire pattern): a frame element (title, tabs, labels, search fields, toggles) and a list-region element (rows + page bar) positioned exactly over the active tab's list band. In-place `element:update()` calls are avoided because lua_ui re-attaches TextEdit input widgets on every update, which drops keyboard focus.
+- The list element is aligned with the frame using `relativePosition` + `anchor` only — never an absolute `position`, which interacts unreliably with `size` on root elements and misplaces the list. Both share the canvas center: `anchor = (0.5, (WIN_H/2 − regionTop)/regionHeight)` puts the band's top-left at window-local `(0, regionTop)` for any canvas size.
+- The frame carries an invisible placeholder container over the active tab's list band: the frame window sizes from its content, so without the placeholder the empty band collapses and the frame renders smaller than the list element. The placeholder is offset −4px in slot coordinates (thick-border inset) so its window-space extent matches the list element exactly.
+- Search filters live: `textChanged` on each keystroke rebuilds only the list element, so the focused search field (in the frame element) keeps keyboard focus. Full frame + list rebuild happens on open and tab switch; reentrancy guards skip nested rebuilds.
 
 ## Notes
 
