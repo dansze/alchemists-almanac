@@ -83,8 +83,8 @@ local function discover(init)
         local restock = {}
         for _, v in pairs(ingredientList) do
             report(v and v.recordId)
-            -- Negative count = restocking supply the merchant sells.
-            if v and v.count and v.count < 0 and v.recordId then
+            -- Use types.Item to determine if item is restocking
+            if v and types.Item.isRestocking(v) and v.recordId then
                 restock[#restock + 1] = v.recordId
             end
         end
