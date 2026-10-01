@@ -45,15 +45,15 @@ end
 
 -- Seed via the real path: records -> buildIngredientEffects -> storeIndexes
 local records = {
-    { id = 'a', name = 'Blue Mountain', icon = 'n\\tx_a.tga',
+    { id = 'a', name = 'Blue Mountain', icon = 'n\\tx_a.tga', value = 12,
       effects = { { id = 'health', affectedAttribute = 'Health' } } },
-    { id = 'b', name = 'Almsivito', icon = 'n\\tx_b.tga',
+    { id = 'b', name = 'Almsivito', icon = 'n\\tx_b.tga', value = 5,
       effects = { { id = 'health', affectedAttribute = 'Magicka' }, { id = 'fire' } } },
-    { id = 'c', name = 'Trebactadine', icon = 'n\\tx_c.tga', effects = { { id = 'frost' } } },
-    { id = 'e', name = 'Alitortoise Egg',
+    { id = 'c', name = 'Trebactadine', icon = 'n\\tx_c.tga', value = 33, effects = { { id = 'frost' } } },
+    { id = 'e', name = 'Alitortoise Egg', value = 0,
       effects = { { id = 'health', affectedAttribute = 'Health' } } }, -- same compound as a
     { id = '', effects = {} },              -- skipped: empty id
-    { id = 'd', effects = { nil, { id = '' } } },  -- no usable effects (name falls back to id)
+    { id = 'd', effects = { nil, { id = '' } } },  -- no usable effects (name falls back to id; no value)
 }
 db.storeIndexes(db.buildIngredientEffects(records))
 db.storeIngredientInfo(db.buildIngredientInfo(records))
@@ -135,6 +135,23 @@ db.discoverMerchant('sachis', 'Sachis II', { 'c' }, 'Anvil') -- re-encounter: un
 expectEqual(asSet(db.getMerchants().sachis.ingredients), { a = true, c = true }, 're-encounter union')
 assert(db.getMerchants().sachis.location == 'Anvil', 'location updated on re-encounter')
 
+-- Full restock entries (planner expandable merchant rows): ids resolved to
+-- display names + gold values, sorted by name.
+local ra = db.getMerchantRestock('merchant_a')
+assert(#ra == 3
+    and ra[1].name == 'Almsivito' and ra[1].value == 5
+    and ra[2].name == 'Blue Mountain' and ra[2].value == 12
+    and ra[3].name == 'Trebactadine' and ra[3].value == 33, 'restock entries: union + resolved + sorted')
+local rs = db.getMerchantRestock('sachis')
+assert(#rs == 2 and rs[1].name == 'Blue Mountain' and rs[2].name == 'Trebactadine', 'restock entries sorted')
+assert(#db.getMerchantRestock('merchant_b') == 0, 'empty restock -> empty list')
+assert(#db.getMerchantRestock('nobody') == 0, 'unknown merchant -> empty list')
+assert(db.getIngredientInfo('a').value == 12, 'ingredient info carries gold value')
+local il = db.getIngredientList(false)
+local byIngId = {}
+for _, it in ipairs(il) do byIngId[it.id] = it end
+assert(byIngId.a.value == 12 and byIngId.d.value == 0, 'ingredient list carries gold value (missing -> 0)')
+
 -- restockCounts: a -> merchant_a, sachis, vevagun; b -> merchant_a, goro; c -> merchant_a, sachis
 local rc = db.restockCounts()
 assert(rc.a == 3 and rc.b == 2 and rc.c == 2 and rc.e == 1, 'restockCounts')
@@ -146,6 +163,11 @@ local byId = {}
 for _, m in ipairs(allM) do byId[m.id] = m end
 expectEqual(asSet(byId.merchant_a.ingredients),
     { ['Blue Mountain'] = true, Almsivito = true, Trebactadine = true }, 'no-keys full restock names')
+-- canonical order: sorted by name (union storage order is a,c,b here), so the
+-- collapsed short form is a prefix of the expanded row's list
+assert(byId.merchant_a.ingredients[1] == 'Almsivito'
+    and byId.merchant_a.ingredients[2] == 'Blue Mountain'
+    and byId.merchant_a.ingredients[3] == 'Trebactadine', 'no-keys restock list sorted')
 assert(byId.merchant_b and #byId.merchant_b.ingredients == 0, 'no-keys empty restock')
 
 -- Single key, non-strict: >=1 distinct restocking ingredient with that effect

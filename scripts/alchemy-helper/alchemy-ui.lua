@@ -45,6 +45,7 @@ end
 
 -- ui.ALIGNMENT may be absent on older builds; nil means "no explicit align".
 local ALIGN_CENTER = ui.ALIGNMENT and ui.ALIGNMENT.Center or nil
+local ALIGN_END = ui.ALIGNMENT and ui.ALIGNMENT.End or nil
 
 -- Morrowind menu palette: gold headers/labels, warm white body, dim notes.
 local C_GOLD = util.color.rgb(0.76, 0.7, 0.5)
@@ -82,6 +83,11 @@ local MERCH_X = MARGIN + EFF_W + 24 -- 398
 local MERCH_W = WIN_W - MARGIN - MERCH_X -- 378
 local EFF_ROW_H = 24 -- 16 rows/page
 local MERCH_ROW_H = 60 -- 6 rows/page
+-- Expanded merchant row: header is name + location only (the short matched
+-- line is hidden while the full list shows); restock names start below it,
+-- one per line.
+local MERCH_EXP_HDR = 42
+local MERCH_ING_LINE = 17
 
 -- Vertical bands (window-local y) covered by the list element. No interactive
 -- frame widget sits inside a band, so the list element may consume clicks in
@@ -119,6 +125,7 @@ local state = {
     merchSort = 'name', -- 'name' | 'location'
     strict = false, -- session-only per spec
     selectedEffects = {}, -- set: compoundKey -> true
+    expandedMerchant = nil, -- merchant id with its restock list expanded
     ingOffset = 0,
     effOffset = 0,
     merchOffset = 0,
@@ -165,6 +172,12 @@ local function text(str, o)
         t.template = tpl
     end
     return t
+end
+
+--- Gold value for row display (record .value; 0/missing -> "0g").
+local function formatGold(v)
+    if type(v) ~= 'number' or v <= 0 then return '0g' end
+    return math.floor(v) .. 'g'
 end
 
 --- Native-looking button: bordered container + centered label.
@@ -363,6 +376,7 @@ local function ingredientRow(item, y, counts, names)
     end
     kids[#kids + 1] = text(item.name, { x = 46, y = 2, w = 560, h = 18, size = 17, color = C_WHITE })
     kids[#kids + 1] = text(table.concat(effNames, ', '), { x = 46, y = 21, w = 560, h = 17, size = 14, color = C_DIM })
+    kids[#kids + 1] = text(formatGold(item.value), { x = 616, y = 2, w = 128, h = 17, size = 14, color = C_GOLD, alignH = ALIGN_END })
     kids[#kids + 1] = text(n .. (n == 1 and ' merchant' or ' merchants'), { x = 616, y = 21, w = 128, h = 17, size = 14, color = C_DIM })
     box.content = ui.content(kids)
     return box
@@ -446,7 +460,12 @@ local function effectRow(item, y)
     return box
 end
 
-local function merchantRow(m, y)
+--- Merchant row. Clicking toggles expansion: the row grows to list every
+-- ingredient the merchant restocks (union across encounters, sorted — the
+-- same canonical order as the collapsed short form, which is its prefix).
+-- The block is capped at availH - y so it never overlaps the page bar; names
+-- that do not fit collapse into a "+N more" line. Returns (box, height).
+local function merchantRow(m, y, availH)
     local ingNames = m.ingredients or {}
     local shown = {}
     for i = 1, math.min(2, #ingNames) do
@@ -457,13 +476,61 @@ local function merchantRow(m, y)
     if extra > 0 then
         line = line .. ' +' .. extra .. ' more'
     end
-    local box = rowBox(0, y, MERCH_W - 4, MERCH_ROW_H - 4)
-    box.content = ui.content{
+
+    local h = MERCH_ROW_H - 4
+    local restock = nil
+    if state.expandedMerchant == m.id then
+        local all = db.getMerchantRestock(m.id)
+        local maxLines = math.floor((availH - y - MERCH_EXP_HDR) / MERCH_ING_LINE)
+        if maxLines >= 1 then
+            local count = math.min(#all, maxLines)
+            local hidden = #all > count and 1 or 0
+            count = count - hidden
+            restock = { all = all, count = count, hidden = hidden }
+            -- at least one line: the "+N more" marker or the empty-supply note
+            h = MERCH_EXP_HDR + math.max(1, count + hidden) * MERCH_ING_LINE
+        end
+        -- maxLines < 1: not enough room below the header; render collapsed.
+    end
+
+    local box = rowBox(0, y, MERCH_W - 4, h)
+    local c = {
         text(m.name, { x = 8, y = 2, w = MERCH_W - 20, h = 18, size = 17, color = C_WHITE }),
         text(m.location or 'unknown location', { x = 8, y = 22, w = MERCH_W - 20, h = 16, size = 14, color = C_DIM }),
-        text(line ~= '' and line or '(no matching ingredients)', { x = 8, y = 40, w = MERCH_W - 20, h = 15, size = 13, color = C_DIM }),
     }
-    return box
+    if restock then
+        -- Full restock list visible: the short matched line is hidden.
+        if #restock.all == 0 then
+            c[#c + 1] = text('(no restocking supply)', { x = 14, y = MERCH_EXP_HDR, w = MERCH_W - 26, h = 15, size = 13, color = C_DIM })
+        else
+            for i = 1, restock.count do
+                local ly = MERCH_EXP_HDR + (i - 1) * MERCH_ING_LINE
+                c[#c + 1] = text(restock.all[i].name, { x = 14, y = ly, w = 280, h = 15, size = 13, color = C_DIM })
+                c[#c + 1] = text(formatGold(restock.all[i].value), { x = MERCH_W - 74, y = ly, w = 60, h = 15, size = 13, color = C_GOLD, alignH = ALIGN_END })
+            end
+            if restock.hidden == 1 then
+                c[#c + 1] = text('+' .. (#restock.all - restock.count) .. ' more', { x = 14, y = MERCH_EXP_HDR + restock.count * MERCH_ING_LINE, w = MERCH_W - 26, h = 15, size = 13, color = C_DIM })
+            end
+        end
+    else
+        c[#c + 1] = text(line ~= '' and line or '(no matching ingredients)', { x = 8, y = 40, w = MERCH_W - 20, h = 15, size = 13, color = C_DIM })
+    end
+    box.content = ui.content(c)
+    box.events = {
+        mouseClick = async:callback(function()
+            -- if/else, not `(cond) and nil or id`: the ternary form parses
+            -- as `((cond) and nil) or id` and can never yield nil.
+            if state.expandedMerchant == m.id then
+                state.expandedMerchant = nil
+            else
+                state.expandedMerchant = m.id
+            end
+            rebuildList()
+        end),
+    }
+    -- propagateEvents stays on: the wheel handler lives on the column
+    -- container (an ancestor), so mouseWheel over a row must reach it.
+    return box, h
 end
 
 local function buildPlannerList()
@@ -482,9 +549,18 @@ local function buildPlannerList()
         effRows[1] = text('(none)', { x = 8, y = 4, w = 200, h = 20, size = 15, color = C_DIM })
     end
 
+    -- Variable row heights: an expanded merchant grows, following rows shift
+    -- down, and rows that no longer fit below the page bar are skipped
+    -- (they remain reachable on later pages).
     local merchRows = {}
+    local availH = PLAN_PAGE_Y - PLAN_LIST_Y
+    local y = 0
     for i = state.merchOffset + 1, math.min(#merchants, state.merchOffset + merchPerPage) do
-        merchRows[#merchRows + 1] = merchantRow(merchants[i], (i - 1 - state.merchOffset) * MERCH_ROW_H)
+        local row, h = merchantRow(merchants[i], y, availH)
+        if y + h <= availH then
+            merchRows[#merchRows + 1] = row
+            y = y + h + 4
+        end
     end
     if #merchRows == 0 then
         merchRows[1] = text('(none)', { x = 8, y = 4, w = 200, h = 20, size = 15, color = C_DIM })

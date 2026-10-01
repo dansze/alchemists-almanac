@@ -16,6 +16,7 @@ Each ingredient row displays the following.
 - Name
 - Icon (the ingredient record's icon, `IngredientRecord.icon`)
 - Effects (display names; compound — one entry per effect + attribute/skill combination)
+- Cost (the ingredient record's gold value, `IngredientRecord.value`)
 - Number of discovered merchants that restock the ingredient (i.e., include it in their restocking supply). A merchant with the Ingredients service but no restocking supply of the item does not count.
 
 ## Shopping Planner
@@ -37,6 +38,8 @@ A list of all discovered merchants, filtered by the effect selection (with no ef
 - List of ingredients they restock that match any selected effect (ingredient record names; with no selection, their full restocking supply)
 
 The merchant list should be sortable and filterable by both Actor and Location names.
+
+Clicking a merchant expands its row to show the full restocking supply (every ingredient ever seen in their negative-count inventory, union across encounters, sorted by name; each entry shows the ingredient's gold value); clicking again collapses it. Only one merchant is expanded at a time. Both views share the same sorted order — the collapsed short form is a prefix of the expanded list — and the short form is hidden while the full list is visible (and vice versa). The expanded block grows downward within the column — names that do not fit above the page bar collapse into a "+N more" line, and rows pushed out of view are skipped until the expansion is collapsed or the list is paged.
 
 ## Implementation Notes (UI)
 

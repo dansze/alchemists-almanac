@@ -181,6 +181,22 @@ function M.getMerchants()
     return storage.globalSection(DISCOVERED_SECTION):get('merchants') or {}
 end
 
+--- Every ingredient the merchant restocks (union across all encounters) as
+-- { name = displayName, value = goldValue } entries sorted by name. {} for
+-- unknown merchants or an empty supply.
+function M.getMerchantRestock(merchantId)
+    if type(merchantId) ~= 'string' then return {} end
+    local m = M.getMerchants()[merchantId]
+    local info = readIndex().ingredients or {}
+    local out = {}
+    for _, ingId in ipairs(m and m.ingredients or {}) do
+        local meta = info[ingId]
+        out[#out + 1] = { name = (meta and meta.name) or ingId, value = (meta and meta.value) or 0 }
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
 --- Clear all discovered ingredients and merchants. GLOBAL context only.
 --- Used by the detection reset so re-detection starts from a clean slate.
 function M.clearDiscovered()
@@ -287,7 +303,7 @@ function M.buildIngredientInfo(records)
     local info = {}
     for _, ing in ipairs(records or {}) do
         if ing and ing.id and ing.id ~= '' then
-            info[ing.id] = { name = ing.name or ing.id, icon = ing.icon }
+            info[ing.id] = { name = ing.name or ing.id, icon = ing.icon, value = ing.value or 0 }
         end
     end
     return info
@@ -461,6 +477,7 @@ function M.getIngredientList(discoveredOnly)
                 id = id,
                 name = meta.name,
                 icon = meta.icon,
+                value = meta.value or 0,
                 effects = effMap[id] or {},
             }
         end
@@ -565,8 +582,11 @@ function M.queryMerchantsForEffects(effectKeys, strict)
             else
                 list = {}
                 for ingId in pairs(matched) do list[#list + 1] = nameOf(ingId) end
-                table.sort(list)
             end
+            -- Canonical (sorted) order in both cases: the planner's expanded
+            -- row lists getMerchantRestockNames (sorted), and the collapsed
+            -- short form must be a prefix of it.
+            table.sort(list)
             out[#out + 1] = {
                 id = id,
                 name = m.name or id,
