@@ -221,11 +221,13 @@ function M.getIngredientEffects(ingredientId)
 end
 
 --- Ingredient IDs having the given effect (any attribute/skill variant).
+-- Effect/ingredient ids are matched case-insensitively: index keys come from
+-- engine-serialized (lowercase) RefIds, callers may pass CamelCase.
 function M.queryByEffect(effectId, discoveredOnly)
     local ids = nil
     if type(effectId) == 'string' then
         local idx = readIndex()
-        ids = idx.baseEffectIngredients and idx.baseEffectIngredients[effectId] or nil
+        ids = idx.baseEffectIngredients and idx.baseEffectIngredients[effectId:lower()] or nil
     end
     if not ids then
         return {}
@@ -236,13 +238,17 @@ end
 --- Ingredient IDs sharing at least one effect with the given ingredient
 --- (the ingredient itself is excluded).
 function M.querySharedWith(ingredientId, discoveredOnly)
-    local effList = type(ingredientId) == 'string' and M.getIngredientEffects(ingredientId) or nil
+    if type(ingredientId) ~= 'string' or ingredientId == '' then
+        return {}
+    end
+    local id = ingredientId:lower()
+    local effList = M.getIngredientEffects(id)
     if not effList then
         return {}
     end
     local idx = readIndex()
     local disc = discoveredOnly and discoveredSet() or nil
-    local seen = { [ingredientId] = true }
+    local seen = { [id] = true }
     local out = {}
     for _, entry in ipairs(effList) do
         local ids = idx.baseEffectIngredients and idx.baseEffectIngredients[entry:match('^[^~]*')] or nil
@@ -267,7 +273,7 @@ function M.queryEffects(effectIds)
     local out = {}
     for _, effId in ipairs(effectIds or {}) do
         if type(effId) == 'string' then
-            local ids = idx.baseEffectIngredients and idx.baseEffectIngredients[effId] or nil
+            local ids = idx.baseEffectIngredients and idx.baseEffectIngredients[effId:lower()] or nil
             if ids then
                 out[effId] = { ingredients = ids }
             end
@@ -295,14 +301,23 @@ end
 -- Display names are generated from CamelCase RefIds at runtime (no engine
 -- API exposes MGEF names). One hand-tuned exception keeps the vanilla skill
 -- spelling.
-local NAME_EXCEPTIONS = { HandToHand = 'Hand-to-Hand' }
+-- NOTE: the engine serializes RefIds LOWERCASE into Lua (RefId::serializeText
+-- lowercases StringRefIds), so ids arriving from record properties look like
+-- "fortifyattribute" / "handtohand". Lookups are therefore case-insensitive,
+-- and generated names capitalize the first letter when no CamelCase boundary
+-- exists to split on.
+local NAME_EXCEPTIONS = { handtohand = 'Hand-to-hand' }
 
---- Display name for a CamelCase RefId ("WeaknessToFire" -> "Weakness to Fire").
+--- Display name for a RefId ("WeaknessToFire" -> "Weakness to Fire",
+-- "weaknesstofire" -> "Weaknesstofire").
 function M.displayName(id)
     if type(id) ~= 'string' or id == '' then return '' end
-    local name = NAME_EXCEPTIONS[id]
+    local name = NAME_EXCEPTIONS[id] or NAME_EXCEPTIONS[id:lower()]
     if not name then
         name = id:gsub('([a-z])([A-Z])', '%1 %2'):gsub(' To ', ' to ')
+        if not id:find('[A-Z]') then
+            name = name:sub(1, 1):upper() .. name:sub(2)
+        end
     end
     return name
 end
@@ -316,14 +331,19 @@ end
 --- generation as fallback.
 function M.buildEffectNames(records)
     local effectNames = {}
+    -- Target names keyed by LOWERCASE id: the engine hands ids to Lua in
+    -- lowercase, and formatEffectName looks them up case-insensitively.
     local targetNames = {}
-    for k, v in pairs(staticNames.attributes) do targetNames[k] = v end
-    for k, v in pairs(staticNames.skills) do targetNames[k] = v end
+    for k, v in pairs(staticNames.attributes) do targetNames[k:lower()] = v end
+    for k, v in pairs(staticNames.skills) do targetNames[k:lower()] = v end
     -- No {attr, skill} table: a nil first entry would hide the second from
     -- ipairs.
     local function addTarget(t)
-        if type(t) == 'string' and t ~= '' and not targetNames[t] then
-            targetNames[t] = M.displayName(t)
+        if type(t) == 'string' and t ~= '' then
+            local key = t:lower()
+            if not targetNames[key] then
+                targetNames[key] = M.displayName(t)
+            end
         end
     end
     for _, ing in ipairs(records or {}) do
@@ -354,15 +374,16 @@ function M.storeEffectNames(names)
 end
 
 --- Name maps { effectNames, targetNames }: the stored (record-built) maps
---- with the static attribute/skill names merged on top.
+--- with the static attribute/skill names merged on top. targetNames is keyed
+--- by lowercase id (see buildEffectNames).
 function M.getEffectNames()
     local idx = readIndex()
     local effectNames = {}
     for k, v in pairs(idx.effectNames or {}) do effectNames[k] = v end
     local targetNames = {}
-    for k, v in pairs(idx.targetNames or {}) do targetNames[k] = v end
-    for k, v in pairs(staticNames.attributes) do targetNames[k] = v end
-    for k, v in pairs(staticNames.skills) do targetNames[k] = v end
+    for k, v in pairs(idx.targetNames or {}) do targetNames[k:lower()] = v end
+    for k, v in pairs(staticNames.attributes) do targetNames[k:lower()] = v end
+    for k, v in pairs(staticNames.skills) do targetNames[k:lower()] = v end
     return { effectNames = effectNames, targetNames = targetNames }
 end
 
@@ -382,11 +403,16 @@ function M.formatEffectName(compoundKey, names)
     end
     local effId, attr, skill = parts[1], parts[2], parts[3]
     local name = effectNames[effId] or M.displayName(effId)
+    -- Target lookup is case-insensitive: the engine serializes RefIds to
+    -- lowercase, the static table ships CamelCase keys.
+    local function targetDisplay(t)
+        return targetNames[t] or targetNames[t:lower()] or M.displayName(t)
+    end
     local target = nil
     if skill and skill ~= '' then
-        target = targetNames[skill] or skill
+        target = targetDisplay(skill)
     elseif attr and attr ~= '' then
-        target = targetNames[attr] or attr
+        target = targetDisplay(attr)
     end
     if target then
         -- No '|' alternation: pattern semantics differ across Lua versions.

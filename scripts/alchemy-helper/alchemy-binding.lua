@@ -28,7 +28,7 @@ interface.Settings.registerPage {
     key = 'AlchemyHelper',
     l10n = 'AlchemyHelper',
     name = 'Alchemist\'s Almanac',
-    description = 'AlchemyHelper',
+    description = 'Keeps track of your ingredients and who sells them.',
 }
 
 interface.Settings.registerGroup {
@@ -36,7 +36,7 @@ interface.Settings.registerGroup {
     l10n = 'AlchemyHelper',
     page = 'AlchemyHelper',
     name = 'AlchemyHelper',
-    description = 'AlchemyHelperSettingsDesc',
+    description = 'Mod settings and debug options',
     permanentStorage = true,
     settings = {
         {
@@ -56,7 +56,7 @@ interface.Settings.registerGroup {
             key = SETTINGS.immersiveMode,
             renderer = 'checkbox',
             name = 'Immersive Mode',
-            description = 'Only show ingredients and merchants the player has encountered.',
+            description = 'Only show ingredients the player has encountered. Merchants always need to be encountered to show in the almanac.',
             default = true,
         },
         {

@@ -10,12 +10,20 @@
 -- shop): boxTransparentThick window frame, gold/white/dim palette, shadowed
 -- text at menu font sizes, absolute positioning inside one window container.
 --
--- The window is two elements (destroy + ui.create rebuilds, Squire-style):
--- a frame element (chrome, labels, search fields) and a list-region element
--- (rows + page bar). In-place element:update() calls are avoided because
--- lua_ui re-attaches TextEdit input widgets on every update, which drops
--- keyboard focus. Live filtering rebuilds only the list element on each
--- keystroke, so a focused search field in the frame keeps typing focus.
+-- The window is three elements (destroy + ui.create rebuilds, Squire-style):
+-- a frame element (border, title, band placeholder), a controls element
+-- (tabs, close, search fields, toggles, sort buttons) and a list-region
+-- element (rows + page bar). In-place element:update() calls are avoided
+-- because lua_ui re-attaches TextEdit input widgets on every update, which
+-- drops keyboard focus. Live filtering rebuilds only the list element on
+-- each keystroke, so a focused search field in the controls element keeps
+-- typing focus.
+--
+-- The controls are a SEPARATE element from the frame background: clicking a
+-- widget promotes its root element in the layer order, and if the controls
+-- lived inside the frame element every click would drag the whole window
+-- background up over the list. The controls band never overlaps the list
+-- band, so promotion is harmless.
 
 local ui = require('openmw.ui')
 local async = require('openmw.async')
@@ -81,6 +89,14 @@ local MERCH_ROW_H = 60 -- 6 rows/page
 local ING_REGION_TOP, ING_REGION_BOT = ING_LIST_Y, ING_PAGE_Y + 32
 local PLAN_REGION_TOP, PLAN_REGION_BOT = PLAN_LIST_Y, PLAN_PAGE_Y + 30
 
+-- Controls overlay element: spans window-local y 4..(region top) — exactly
+-- the non-band area of the active tab, so it never overlaps the list
+-- element. Its origin sits at the frame's slot origin (window-local 4,4)
+-- and its width matches the slot (WIN_W - 8), so children keep the same
+-- coordinates they had as frame-slot content.
+local CTRL_H_ING = ING_REGION_TOP - 4   -- 146
+local CTRL_H_PLAN = PLAN_REGION_TOP - 4 -- 206
+
 --- Immersive Mode: filter UI to discovered ingredients. Read live so an
 -- in-game settings toggle applies on the next rebuild; nil (unset) = on.
 local function immersiveMode()
@@ -114,11 +130,13 @@ local state = {
 -- the frame keeps keyboard focus (destroying/updating its own tree would
 -- detach the MyGUI EditBox and drop focus).
 local frameEl = nil
+local controlEl = nil
 local listEl = nil
 
 -- Forward declarations: interaction callbacks reference these before their
 -- definitions below (closures resolve lexically at compile time).
 local rebuild
+local rebuildControls
 local rebuildList
 
 -- ---------------------------------------------------------------------------
@@ -198,7 +216,7 @@ end
 --- Labeled, bordered search field: gold label above a TextEdit wrapped in
 -- a thin-border box (the engine has no native bordered-field template).
 -- Typing re-filters live on every keystroke: only the list element is
--- rebuilt, so this TextEdit (in the frame element) keeps keyboard focus.
+-- rebuilt, so this TextEdit (in the controls element) keeps keyboard focus.
 local function searchField(x, y, w, label, getState, setState)
     local box = rowBox(x, y + FIELD_GAP, w, FIELD_H)
     box.content = ui.content{
@@ -527,8 +545,10 @@ local function buildPlannerList()
 end
 
 -- ---------------------------------------------------------------------------
--- Frame build: chrome, labels and search fields. Rebuilt only on open and
--- tab switch — never while a search field is focused.
+-- Frame + controls build. The frame (border, title, band placeholder) and
+-- the interactive controls are separate elements — see the file header for
+-- why. Both are rebuilt only on open and tab switch, never while a search
+-- field is focused.
 -- ---------------------------------------------------------------------------
 
 local function tabButton(x, w, label, name)
@@ -541,9 +561,8 @@ local function tabButton(x, w, label, name)
     end, true, active and C_GOLD or C_DIM)
 end
 
-local function buildFrameContent()
+local function buildControlContent()
     local c = {
-        text('ALCHEMIST\'S ALMANAC', { x = MARGIN, y = TITLE_Y, w = 560, h = 30, size = 22, color = C_GOLD }),
         button(WIN_W - MARGIN - 90, TITLE_Y + 2, 90, 32, 'CLOSE', function()
             api.hide()
         end),
@@ -558,6 +577,8 @@ local function buildFrameContent()
         end
     else
         -- Strict Mode toggle (Squire-style [X] marker; session-only).
+        -- Only the controls + list elements are rebuilt — never the frame
+        -- background, so its layer order (and the list's) is undisturbed.
         c[#c + 1] = {
             type = ui.TYPE.Text,
             props = {
@@ -572,7 +593,8 @@ local function buildFrameContent()
             events = {
                 mouseClick = async:callback(function()
                     state.strict = not state.strict
-                    rebuild()
+                    rebuildControls()
+                    rebuildList()
                 end),
             },
         }
@@ -590,13 +612,22 @@ local function buildFrameContent()
         end
         c[#c + 1] = button(MERCH_X + 268, PLAN_FIELD_Y, 52, 28, 'NAME', function()
             state.merchSort = 'name'
-            rebuild()
+            rebuildControls()
+            rebuildList()
         end, true, state.merchSort == 'name' and C_GOLD or C_DIM)
         c[#c + 1] = button(MERCH_X + 326, PLAN_FIELD_Y, 52, 28, 'LOC', function()
             state.merchSort = 'location'
-            rebuild()
+            rebuildControls()
+            rebuildList()
         end, true, state.merchSort == 'location' and C_GOLD or C_DIM)
     end
+    return c
+end
+
+local function buildFrameContent()
+    local c = {
+        text('ALCHEMIST\'S ALMANAC', { x = MARGIN, y = TITLE_Y, w = 560, h = 30, size = 22, color = C_GOLD }),
+    }
     -- Invisible placeholder occupying the list band. The frame window sizes
     -- from its content; without this the empty band collapses and the frame
     -- renders smaller than the list element overlaid on it. Slot coordinates
@@ -613,7 +644,7 @@ local function buildFrameContent()
 end
 
 --- Rebuild only the list element (rows + page bar). Runs on every
--- keystroke, row click and page change; the frame element — including any
+-- keystroke, row click and page change; the controls element — including any
 -- focused TextEdit — is left untouched so typing keeps keyboard focus.
 local rebuildingList = false
 function rebuildList()
@@ -653,8 +684,44 @@ function rebuildList()
     end
 end
 
--- Full rebuild: frame + list. Used on open and tab switch. Reentrancy guard:
--- a nested pass would destroy/create elements mid-flight.
+--- Rebuild only the controls element (tabs, close, search fields, strict
+-- toggle, sort buttons). Runs on toggle/sort clicks; the frame background is
+-- left untouched so its layer order — and the list's — is undisturbed.
+local rebuildingControls = false
+function rebuildControls()
+    if not state.visible or rebuildingControls then
+        return
+    end
+    rebuildingControls = true
+    local ok, err = pcall(function()
+        if controlEl then
+            controlEl:destroy()
+            controlEl = nil
+        end
+        local ctrlH = state.tab == 'ingredients' and CTRL_H_ING or CTRL_H_PLAN
+        -- Top-left at the frame's slot origin (window-local 4,4) via
+        -- relativePosition + anchor only — no absolute position. Width matches
+        -- the slot (WIN_W - 8), so with anchor_x = 0.5 the left edge lands on
+        -- window x = 4.
+        controlEl = ui.create({
+            layer = 'Windows',
+            type = ui.TYPE.Container,
+            props = {
+                relativePosition = v2(0.5, 0.5),
+                anchor = v2(0.5, (WIN_H / 2 - 4) / ctrlH),
+                size = v2(WIN_W - 8, ctrlH),
+            },
+            content = ui.content(buildControlContent()),
+        })
+    end)
+    rebuildingControls = false
+    if not ok then
+        error(err, 0)
+    end
+end
+
+-- Full rebuild: frame + controls + list. Used on open and tab switch.
+-- Reentrancy guard: a nested pass would destroy/create elements mid-flight.
 local rebuilding = false
 function rebuild()
     if not state.visible or rebuilding then
@@ -681,6 +748,7 @@ function rebuild()
             t.template = tpl
         end
         frameEl = ui.create(t)
+        rebuildControls()
         rebuildList()
     end)
     rebuilding = false
@@ -744,6 +812,10 @@ function api.hide()
     if frameEl then
         frameEl:destroy()
         frameEl = nil
+    end
+    if controlEl then
+        controlEl:destroy()
+        controlEl = nil
     end
     if listEl then
         listEl:destroy()

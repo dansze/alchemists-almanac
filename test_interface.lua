@@ -186,8 +186,10 @@ local names = db.buildEffectNames(nameRecords)
 assert(names.effectNames.WeaknessToFire == 'Weakness to Fire', 'name collected from localized MagicEffect name')
 assert(names.effectNames.SummonCreature04 == 'Summon Creature04', 'empty effect name -> generated (digits stay attached)')
 assert(names.effectNames.Sleep == 'Sleep', 'no effect record -> generated name')
-assert(names.targetNames.Strength == 'Strength', 'target name: attribute')
-assert(names.targetNames.HandToHand == 'Hand-to-hand', 'target name: static GMST spelling')
+-- targetNames is keyed by LOWERCASE id (the engine serializes RefIds to
+-- lowercase); values keep the display casing.
+assert(names.targetNames.strength == 'Strength', 'target name: attribute (lowercase key)')
+assert(names.targetNames.handtohand == 'Hand-to-hand', 'target name: static GMST spelling (lowercase key)')
 db.storeEffectNames(names)
 local stored = db.getEffectNames()
 assert(stored.effectNames.WeaknessToFire == 'Weakness to Fire', 'name maps survive the index section round-trip')
@@ -198,6 +200,28 @@ assert(db.formatEffectName('FortifySkill~HandToHand', stored) == 'Fortify Hand-t
 assert(db.formatEffectName('FortifySkill~LongBlade', stored) == 'Fortify Long Blade', 'format: multi-word GMST skill name')
 assert(db.formatEffectName('WeaknessToFire~Weird', {}) == 'Weakness to Fire Weird', 'format: unmapped target falls back to raw ID')
 assert(db.formatEffectName('BrandNewModEffect', {}) == 'Brand New Mod Effect', 'format: unmapped effId gets generated name')
+
+-- Engine-serialized (lowercase) RefIds: the engine lowercases StringRefIds
+-- when pushing them into Lua, so real ids look like 'fortifyattribute' /
+-- 'strength'. Formatting must resolve these; public queries must accept
+-- CamelCase input against lowercase index keys.
+local lcRecords = {
+    { id = 'lc1', name = 'LC Test', effects = {
+        { id = 'fortifyattribute', affectedAttribute = 'strength', effect = { name = 'Fortify Attribute' } },
+        { id = 'fortifyskill', affectedSkill = 'handtohand', effect = { name = 'Fortify Skill' } },
+    } },
+}
+local lcNames = db.buildEffectNames(lcRecords)
+assert(db.formatEffectName('fortifyattribute~strength', lcNames) == 'Fortify Strength',
+    'format: engine lowercase keys -> capitalized display')
+assert(db.formatEffectName('fortifyskill~handtohand', lcNames) == 'Fortify Hand-to-hand',
+    'format: lowercase skill key -> GMST spelling')
+assert(db.displayName('weaknesstofire') == 'Weaknesstofire', 'generated name capitalizes all-lowercase id')
+expectEqual(asSet(db.queryByEffect('Health')), { a = true, b = true, e = true },
+    'queryByEffect: CamelCase input vs lowercase index keys')
+expectEqual(asSet(db.querySharedWith('A')), { b = true, e = true }, 'querySharedWith: case-insensitive ingredient id')
+local qe = db.queryEffects({ 'FIRE' })
+assert(qe.FIRE and #qe.FIRE.ingredients == 1, 'queryEffects: case-insensitive lookup, input key echoed')
 
 -- Detection reset stamp + gate
 assert(db.getLastReset() == 0, 'lastReset defaults to 0')
