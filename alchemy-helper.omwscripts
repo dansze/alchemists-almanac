@@ -10,7 +10,9 @@
 # Provides a filterable ingredient list and a shopping planner for finding
 # merchants that sell ingredients.
 #
-# Target: OpenMW 0.50+
+# Target: OpenMW 0.51+
+# Dependency: OpenMW-UIToolkit (EnderWiggin/OpenMW-UIToolkit) installed as a
+# sibling Data Files entry; without it the almanac UI is disabled.
 
 GLOBAL:                       scripts/alchemy-helper/init.lua
 PLAYER:                       scripts/alchemy-helper/alchemy-binding.lua
