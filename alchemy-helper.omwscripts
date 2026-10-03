@@ -13,6 +13,8 @@
 # Target: OpenMW 0.51+
 # Dependency: OpenMW-UIToolkit (EnderWiggin/OpenMW-UIToolkit) installed as a
 # sibling Data Files entry; without it the almanac UI is disabled.
+# Optional: Inventory Extender — when installed, an "AA" button is mounted in
+# its inventory info bar that opens/closes the almanac.
 
 GLOBAL:                       scripts/alchemy-helper/init.lua
 PLAYER:                       scripts/alchemy-helper/alchemy-binding.lua

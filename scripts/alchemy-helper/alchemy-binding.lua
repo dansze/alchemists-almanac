@@ -11,6 +11,9 @@ local alchemyUI = require('scripts.alchemy-helper.alchemy-ui')
 local interface = require('openmw.interfaces')
 local async = require('openmw.async')
 local storage = require('openmw.storage')
+local ui = require('openmw.ui')
+local util = require('openmw.util')
+local ambient = require('openmw.ambient')
 
 local SETTINGS = require('scripts.alchemy-helper.shared.settings')
 
@@ -96,11 +99,65 @@ end
 
 input.registerActionHandler(SETTINGS.action, async:callback(handleUI))
 
+-- ── Inventory Extender "AA" button (soft dependency) ────────────────
+-- Mounts a button into IE's inventory info bar that opens/toggles the
+-- almanac — same pattern as Daily Training's DT button. Skipped entirely
+-- when Inventory Extender is not installed (interface.InventoryExtender
+-- is nil). The IE window may not exist yet at our load time (mod load
+-- order), so mounting retries on UI mode changes until it succeeds.
+local v2 = util.vector2
+local ieButtonMounted = false
+local function mountIEButton()
+    if ieButtonMounted or not alchemyUI.isAvailable() then return end
+    local IE = interface.InventoryExtender
+    if not IE or not IE.getWindow then return end
+    local invWin = IE.getWindow('Inventory')
+    if not invWin or not invWin.infoBar or not invWin.ctx then return end
+
+    local glow = {
+        name = 'alchemyHelperGlow',
+        type = ui.TYPE.Image,
+        props = {
+            relativeSize = v2(1, 1),
+            resource = ui.texture { path = 'white' },
+            color = util.color.rgb(0.35, 0.45, 0.55),
+            alpha = 0.25,
+        },
+    }
+    local label = {
+        type = ui.TYPE.Text,
+        props = {
+            relativePosition = v2(0.5, 0.5), anchor = v2(0.5, 0.5),
+            text = 'AA', textSize = 15, textColor = util.color.rgb(0.95, 0.85, 0.35),
+        },
+    }
+    local btn = {
+        props = { size = v2(28, 28) },
+        content = ui.content { glow, label },
+        events = {
+            mouseRelease = async:callback(function(e)
+                if e.button ~= 1 then return end
+                ambient.playSound('menu click')
+                if alchemyUI.isVisible() then
+                    alchemyUI.hide()
+                else
+                    alchemyUI.show()
+                end
+            end),
+        },
+    }
+    invWin.infoBar.layout.userData.addInfoLayout(btn)
+    ieButtonMounted = true
+end
+
+mountIEButton()
+
 return {
     eventHandlers = {
         -- Esc (or any other mode close) from the engine side orphans the
         -- window; close it when all modes are gone.
         UiModeChanged = function(data)
+            mountIEButton() -- retry: IE may have loaded after us
             alchemyUI.onUiModeChanged(data)
         end,
     },

@@ -44,6 +44,7 @@ local function sectionTable(name)
         set = function(self, k, v) data[k] = v end,
         asTable = function(self) return data end,
         setLifeTime = function(self, lt) end,
+        subscribe = function(self, fn) end,
     }
 end
 package.preload['openmw.storage'] = function()
@@ -138,7 +139,10 @@ local fakeToolkit = {
             }
             regOpts.handler:onOpened(openedWnd, nil, nil)
         end,
-        close = function(id) end,
+        close = function(id)
+            if openedWnd then regOpts.handler:onClosed(openedWnd) end
+            openedWnd = nil
+        end,
         isOpen = function(id) return openedWnd ~= nil end,
         getCenterPositionForSize = function(sz) return { x = 0, y = 0 } end,
     },
@@ -153,3 +157,69 @@ assert(type(openedWnd.content) == 'table', 'onOpened must set window content')
 -- rebuildIngest ran without error and rendered the '(none)' fallback row.
 ui2.hide() -- no toolkit close side effects in the fake; just ensure no error
 print('OK: alchemy-ui open-path checks passed')
+
+-- ---------------------------------------------------------------------------
+-- alchemy-binding.lua: Inventory Extender "AA" button integration.
+--   1. Load with NO InventoryExtender -> nothing mounted (soft dependency).
+--   2. Attach a fake IE, fire UiModeChanged -> retry mounts the button.
+--   3. Click the button -> almanac toggles open/closed.
+-- ---------------------------------------------------------------------------
+
+package.preload['openmw.core'] = function()
+    return { sendGlobalEvent = function() end }
+end
+package.preload['openmw.input'] = function()
+    return {
+        ACTION_TYPE = { Boolean = 'Boolean' },
+        registerAction = function() end,
+        registerActionHandler = function() end,
+    }
+end
+package.preload['openmw.ambient'] = function()
+    return { playSound = function() end }
+end
+ifaces.Settings = {
+    registerPage = function() end,
+    registerGroup = function() end,
+}
+
+local mountedLayouts = {}
+-- No ifaces.InventoryExtender yet: first load must mount nothing.
+local binding = assert(dofile('scripts/alchemy-helper/alchemy-binding.lua'))
+assert(type(binding.eventHandlers.UiModeChanged) == 'function', 'missing UiModeChanged handler')
+assert(#mountedLayouts == 0, 'must not mount without Inventory Extender')
+
+-- IE appears later: getWindow returns an inventory window with an info bar.
+ifaces.InventoryExtender = {
+    getWindow = function(name)
+        if name ~= 'Inventory' then return nil end
+        return {
+            infoBar = { layout = { userData = {
+                addInfoLayout = function(l) mountedLayouts[#mountedLayouts + 1] = l end,
+            } } },
+            ctx = {},
+        }
+    end,
+}
+binding.eventHandlers.UiModeChanged({ oldMode = nil, newMode = 'Interface' })
+assert(#mountedLayouts == 1, 'mode-change retry should mount the AA button')
+
+-- The mounted layout: a 28x28 box whose left-click toggles the almanac.
+local btn = mountedLayouts[1]
+assert(btn.props.size.x == 28 and btn.props.size.y == 28, 'button size')
+local release = btn.events.mouseRelease
+assert(type(release) == 'function', 'button needs mouseRelease')
+
+-- Find the alchemy-ui instance the binding required, via its own state:
+-- clicking should flip isVisible. The binding's ui module is cached in
+-- package.loaded under its require path.
+local boundUI = package.loaded['scripts.alchemy-helper.alchemy-ui']
+assert(type(boundUI) == 'table', 'binding must require alchemy-ui')
+release({ button = 1 })
+assert(boundUI.isVisible() == true, 'left click should open the almanac')
+release({ button = 1 })
+assert(boundUI.isVisible() == false, 'second left click should close it')
+release({ button = 2 }) -- non-left clicks are ignored (still closed)
+assert(boundUI.isVisible() == false, 'right click must not toggle')
+
+print('OK: alchemy-binding IE button checks passed')

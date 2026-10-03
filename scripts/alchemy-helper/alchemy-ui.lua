@@ -931,5 +931,6 @@ return {
     hide = api.hide,
     destroy = api.destroy,
     isVisible = api.isVisible,
+    isAvailable = function() return toolkitInstalled end,
     onUiModeChanged = api.onUiModeChanged,
 }
