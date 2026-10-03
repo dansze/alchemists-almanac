@@ -36,19 +36,33 @@ package.preload['openmw.async'] = function()
 end
 
 local stored = {}
+local function sectionTable(name)
+    stored[name] = stored[name] or {}
+    local data = stored[name]
+    return {
+        get = function(self, k) return data[k] end,
+        set = function(self, k, v) data[k] = v end,
+        asTable = function(self) return data end,
+        setLifeTime = function(self, lt) end,
+    }
+end
 package.preload['openmw.storage'] = function()
     return {
-        playerSection = function(name)
-            stored[name] = stored[name] or {}
-            local data = stored[name]
-            return { get = function(self, k) return data[k] end }
-        end,
+        playerSection = sectionTable,
+        globalSection = sectionTable,
     }
 end
 
--- No openmw.interfaces.UIToolkit: the no-toolkit fallback path.
+-- Shared table: part 1 has no UIToolkit (fallback path), part 2 attaches
+-- fakeToolkit to the SAME table (require caches the module, re-preloading
+-- would be ignored).
+local ifaces = { UI = {
+    getMode = function() return nil end,
+    setMode = function() end,
+    removeMode = function() end,
+} }
 package.preload['openmw.interfaces'] = function()
-    return { UI = { getMode = function() return nil end } }
+    return ifaces
 end
 
 local ui = assert(dofile('scripts/alchemy-helper/alchemy-ui.lua'))
@@ -65,3 +79,77 @@ ui.hide() -- no-op
 ui.onUiModeChanged({ newMode = nil }) -- no-op while closed
 
 print('OK: alchemy-ui load + no-toolkit fallback checks passed')
+
+-- ---------------------------------------------------------------------------
+-- Toolkit-present path: fake I.UIToolkit + leaf modules, drive show() through
+-- onOpened -> buildIngredientsContent -> rebuildIngest. Catches builders that
+-- return nil (e.g. a dropped `return items`) and open-path wiring errors.
+-- ---------------------------------------------------------------------------
+
+local function makeEl(props)
+    return {
+        layout = { props = props or {}, content = nil },
+        update = function(self) end,
+        destroy = function(self) self.layout = nil end,
+    }
+end
+
+local function makeComp(props)
+    local comp = { element = makeEl(props or {}) }
+    function comp:updateProps(p)
+        for k, v in pairs(p) do self.element.layout.props[k] = v end
+        return self
+    end
+    function comp:setDisabled(v) return self end
+    function comp:setActive(v) return self end
+    return comp
+end
+
+package.preload['scripts.UIToolkit.class'] = function()
+    return function(base) return {} end
+end
+package.preload['scripts.UIToolkit.window_handler'] = function()
+    return {}
+end
+package.preload['scripts.UIToolkit.components.list_items.text_item'] = function()
+    return { new = function(self) return {} end }
+end
+
+local openedWnd = nil
+local regOpts = nil
+local fakeToolkit = {
+    Interactive = { updateState = function() end },
+    queueUpdate = function() end,
+    Components = {
+        textButton = function(opts) return makeComp() end,
+        textEdit = function(opts) return makeComp() end,
+        itemList = function(opts)
+            local c = makeComp()
+            function c:setItems(items) assert(type(items) == 'table', 'setItems got non-table') end
+            return c
+        end,
+    },
+    WindowManager = {
+        register = function(id, opts) regOpts = opts end,
+        open = function(id)
+            openedWnd = {
+                setContent = function(self, content) self.content = content end,
+                getInnerSize = function(self) return { x = 792, y = 592 } end,
+            }
+            regOpts.handler:onOpened(openedWnd, nil, nil)
+        end,
+        close = function(id) end,
+        isOpen = function(id) return openedWnd ~= nil end,
+        getCenterPositionForSize = function(sz) return { x = 0, y = 0 } end,
+    },
+}
+ifaces.UIToolkit = fakeToolkit
+
+local ui2 = assert(dofile('scripts/alchemy-helper/alchemy-ui.lua'))
+ui2.show()
+assert(ui2.isVisible() == true, 'window should be open after show()')
+assert(type(openedWnd.content) == 'table', 'onOpened must set window content')
+-- ingredients builder must have produced a table (empty db -> {} not nil);
+-- rebuildIngest ran without error and rendered the '(none)' fallback row.
+ui2.hide() -- no toolkit close side effects in the fake; just ensure no error
+print('OK: alchemy-ui open-path checks passed')

@@ -35,9 +35,8 @@ local SETTINGS = require('scripts.alchemy-helper.shared.settings')
 -- is not installed the mod degrades to a no-op UI with one console warning.
 local okClass, Class = pcall(require, 'scripts.UIToolkit.class')
 local okWh, WindowHandler = pcall(require, 'scripts.UIToolkit.window_handler')
-local okCi, ColumnItem = pcall(require, 'scripts.UIToolkit.components.list_items.column_item')
 local okTi, TextItem = pcall(require, 'scripts.UIToolkit.components.list_items.text_item')
-local toolkitInstalled = okClass and okWh and okCi and okTi
+local toolkitInstalled = okClass and okWh and okTi
 
 --- Vector2 for layout props.
 local function v2(x, y)
@@ -73,6 +72,7 @@ local MERCH_ROW_H = 60 -- 6 rows/page base
 -- one per line.
 local MERCH_EXP_HDR = 42
 local MERCH_ING_LINE = 17
+local ING_ROW_H = 44 -- ingredients rows: icon + two text lines
 
 --- Immersive Mode: filter UI to discovered ingredients. Read live so an
 -- in-game settings toggle applies on the next open; nil (unset) = on.
@@ -96,6 +96,7 @@ local state = {
     strict = false, -- session-only per spec
     selectedEffects = {}, -- set: compoundKey -> true
     expandedMerchant = nil, -- merchant id with its restock list expanded
+    ingOffset = 0,
     merchOffset = 0,
 }
 
@@ -109,6 +110,7 @@ local refs = {}
 
 -- Forward declarations: interaction callbacks reference these before their
 -- definitions below (closures resolve lexically at compile time).
+local rebuildIngest
 local rebuildMerch
 local makeTabButtons
 local switchToTab
@@ -176,7 +178,7 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Flat item tables for the ingredients sorted list. Display strings are
--- precomputed; `valueNum` carries the raw number for numeric sorting. Icon
+-- precomputed for display. Icon
 -- paths are validated up front so a bad path degrades to the toolkit's
 -- fallback icon instead of erroring inside the column renderer.
 local function buildIngredientItems()
@@ -198,15 +200,24 @@ local function buildIngredientItems()
             name = item.name or item.id,
             effects = table.concat(effNames, ', '),
             value = formatGold(item.value),
-            valueNum = type(item.value) == 'number' and item.value or 0,
             merchants = n .. (n == 1 and ' merchant' or ' merchants'),
         }
     end
+    -- db.getIngredientList iterates a hash (no order); the spec wants
+    -- alphabetical by name.
+    table.sort(items, function(a, b)
+        local la, lb = a.name:lower(), b.name:lower()
+        if la == lb then
+            return a.id < b.id
+        end
+        return la < lb
+    end)
     return items
 end
 
 --- Item tables for the effects list. `isActive` reads the live selection set
--- so a toggle only needs provider:refreshState(id) — no row rebuild.
+-- so a toggle only needs an in-place active-state update of the cached row —
+-- no row rebuild.
 local function buildEffectItems()
     local names = db.getEffectNames()
     local items = {}
@@ -298,54 +309,160 @@ end
 -- Ingredients tab
 -- ---------------------------------------------------------------------------
 
-buildIngredientsContent = function(C, innerW, innerH)
-    local rowH = 36
-    local ingList = C.sortedList {
-        size = v2(innerW - 2 * PAD, innerH - LIST_Y - PAD),
-        columns = {
-            { id = 'icon', render = ColumnItem.renderIcon, width = rowH + 10, arg = { sz = 30 } },
-            { id = 'name', name = 'Name', sort = { col = 'name' }, render = ColumnItem.renderText, width = 220 },
-            { id = 'effects', name = 'Effects', render = ColumnItem.renderText },
-            {
-                id = 'value', name = 'Cost', sort = { col = 'valueNum', numeric = true },
-                render = ColumnItem.renderText, width = 90,
-                arg = { textAlignH = ALIGN_END }, align = ALIGN_END,
-            },
-            -- Spacer so the right-aligned cost and the merchant count don't touch.
-            { id = '_gap', render = ColumnItem.renderHidden, width = 24 },
-            { id = 'merchants', name = 'Merchants', render = ColumnItem.renderText, width = 130 },
+--- Ingredients matching the current search (case-insensitive substring in
+-- name or effect display names).
+local function ingredientFilteredList()
+    local q = state.ingSearch:lower()
+    if q == '' then
+        return refs.allIngredients
+    end
+    local filtered = {}
+    for _, item in ipairs(refs.allIngredients) do
+        if (item.name or ''):lower():find(q, 1, true)
+            or (item.effects or ''):lower():find(q, 1, true) then
+            filtered[#filtered + 1] = item
+        end
+    end
+    return filtered
+end
+
+--- Ingredient row: icon, name over the effects line, cost and merchant
+-- count right-aligned — plain lua_ui like the merchant rows.
+local function ingredientRow(item, y, colW)
+    local box = rowBox(0, y, colW - 4, ING_ROW_H - 4)
+    box.content = ui.content {
+        {
+            type = ui.TYPE.Image,
+            props = { position = v2(2, 1), size = v2(36, 36), resource = ui.texture { path = item.icon } },
         },
-        defaultSort = { col = 'name' },
+        text(item.name, { x = 46, y = 2, w = colW - 216, h = 18, size = 17, color = C_WHITE }),
+        text(item.effects, { x = 46, y = 21, w = colW - 216, h = 17, size = 14, color = C_DIM }),
+        text(item.value, { x = colW - 160, y = 2, w = 140, h = 17, size = 14, color = C_GOLD, alignH = ALIGN_END }),
+        text(item.merchants, { x = colW - 160, y = 21, w = 140, h = 17, size = 14, color = C_DIM, alignH = ALIGN_END }),
     }
-    ingList:setItems(buildIngredientItems())
+    return box
+end
+
+--- Rebuild only the ingredient rows + page bar state. Runs on every search
+-- keystroke and page change; the search edit is left untouched so typing
+-- keeps keyboard focus.
+local rebuildingIngest = false
+function rebuildIngest()
+    if not open or rebuildingIngest or not refs.ingCol then
+        return
+    end
+    rebuildingIngest = true
+    local list = ingredientFilteredList()
+    local perPage = math.max(1, math.floor(refs.ingColH / ING_ROW_H))
+    state.ingOffset = clampOffset(state.ingOffset, #list, perPage)
+
+    local rows = {}
+    for i = state.ingOffset + 1, math.min(#list, state.ingOffset + perPage) do
+        rows[#rows + 1] = ingredientRow(list[i], (i - 1 - state.ingOffset) * ING_ROW_H, refs.ingColW)
+    end
+    if #rows == 0 then
+        rows[1] = text('(none)', { x = 8, y = 4, w = 200, h = 20, size = 15, color = C_DIM })
+    end
+
+    -- Rows are plain elements (no components), so swapping the container's
+    -- content and letting the engine drop the old children is safe.
+    refs.ingCol.layout.content = ui.content(rows)
+    refs.ingCol:update()
+
+    local pages = pageCount(#list, perPage)
+    local page = math.floor(state.ingOffset / perPage) + 1
+    refs.ingPageLabel.layout.props.text = 'Page ' .. page .. ' of ' .. pages
+    refs.ingPageLabel:update()
+    refs.ingCanPrev = page > 1
+    refs.ingCanNext = page < pages
+    refs.btnIngPrev:setDisabled(page <= 1)
+    refs.btnIngNext:setDisabled(page >= pages)
+    rebuildingIngest = false
+end
+
+buildIngredientsContent = function(C, innerW, innerH)
+    local colW = innerW - 2 * PAD
+    local colH = innerH - LIST_Y - PAD - PAGE_BTN_H - 6
+    local pageY = innerH - PAD - PAGE_BTN_H
+
+    refs.allIngredients = buildIngredientItems()
+    refs.ingColW = colW
+    refs.ingColH = colH
+
+    -- Rows host (wheel + rows). A root element embedded in the window
+    -- content so it can be updated in place; plain children, safe to swap.
+    local ingCol = ui.create {
+        type = ui.TYPE.Container,
+        props = { position = v2(PAD, LIST_Y), size = v2(colW, colH) },
+        events = {
+            mouseWheel = async:callback(function(e)
+                state.ingOffset = state.ingOffset + (e and e.delta and e.delta.y > 0 and -1 or 1)
+                rebuildIngest()
+            end),
+        },
+    }
+
+    local btnPrev = C.textButton {
+        text = '<', width = 70,
+        canClick = function() return refs.ingCanPrev end,
+        onClick = function()
+            local list = ingredientFilteredList()
+            local perPage = math.max(1, math.floor(colH / ING_ROW_H))
+            state.ingOffset = clampOffset(state.ingOffset - perPage, #list, perPage)
+            rebuildIngest()
+        end,
+    }
+    local btnNext = C.textButton {
+        text = '>', width = 70,
+        canClick = function() return refs.ingCanNext end,
+        onClick = function()
+            local list = ingredientFilteredList()
+            local perPage = math.max(1, math.floor(colH / ING_ROW_H))
+            state.ingOffset = clampOffset(state.ingOffset + perPage, #list, perPage)
+            rebuildIngest()
+        end,
+    }
+    btnPrev:updateProps { position = v2(PAD, pageY) }
+    btnNext:updateProps { position = v2(PAD + 270, pageY) }
+    local pageLabel = ui.create {
+        type = ui.TYPE.Text,
+        props = {
+            position = v2(PAD + 76, pageY + 5),
+            size = v2(180, 22),
+            autoSize = false,
+            text = 'Page 1 of 1',
+            textSize = 14,
+            textColor = C_GOLD,
+            textShadow = true,
+        },
+    }
+
+    refs.ingCol = ingCol
+    refs.btnIngPrev = btnPrev
+    refs.btnIngNext = btnNext
+    refs.ingPageLabel = pageLabel
+    refs.ingCanPrev = false
+    refs.ingCanNext = false
 
     local search = C.textEdit {
         default = state.ingSearch,
-        width = innerW - 2 * PAD,
+        width = colW,
         placeholder = 'Search',
         onValueChanged = function(val)
             state.ingSearch = val or ''
-            local q = state.ingSearch:lower()
-            if q == '' then
-                ingList:setFilter(nil)
-            else
-                ingList:setFilter(function(item)
-                    return (item.name or ''):lower():find(q, 1, true)
-                        or (item.effects or ''):lower():find(q, 1, true)
-                end)
-            end
+            rebuildIngest()
         end,
     }
-
     search:updateProps { position = v2(PAD, FIELD_Y) }
-    ingList:updateProps { position = v2(PAD, LIST_Y) }
-
-    refs.ingList = ingList
-    refs.search = search
 
     local c = makeTabButtons(C, innerW)
     c[#c + 1] = search.element
-    c[#c + 1] = ingList.element
+    c[#c + 1] = ingCol
+    c[#c + 1] = btnPrev.element
+    c[#c + 1] = pageLabel
+    c[#c + 1] = btnNext.element
+
+    rebuildIngest()
     return ui.content(c)
 end
 
@@ -480,7 +597,7 @@ buildPlannerContent = function(C, innerW, innerH)
     local pageY = innerH - PAD - PAGE_BTN_H
 
     -- Effects list: fixed-height text rows; selection is the row's active
-    -- state, toggled via provider:refreshState (no rebuild).
+    -- state, toggled in place on the cached row component (no rebuild).
     local effProvider = TextItem:new()
     local allEffects = buildEffectItems()
     local function applyEffFilter()
@@ -507,10 +624,18 @@ buildPlannerContent = function(C, innerW, innerH)
             else
                 state.selectedEffects[data.id] = true
             end
-            -- Pass the data table, not the id string: toolkit 1.2.0
-            -- refreshState(id) asserts because getCachedView returns an
-            -- element (no .data), while refreshState(data) carries it.
-            effProvider:refreshState(data)
+            -- Toolkit 1.2.0's provider:refreshState is broken: it passes the
+            -- cached ELEMENT to updateState, which then calls
+            -- component:isActive() on it (nil). Do what refreshState does,
+            -- with the real component: apply the active state + deep update.
+            -- Uncached rows pick up their state when materialized.
+            local comp = effProvider:getCachedComponent(data.id)
+            if comp then
+                interfaces.UIToolkit.Interactive.updateState(comp.element, {
+                    active = state.selectedEffects[data.id] == true,
+                })
+                interfaces.UIToolkit.queueUpdate(comp.element, true)
+            end
             rebuildMerch()
         end,
     }
@@ -715,11 +840,11 @@ function Handler:onClosed()
 end
 
 --- Right-stick scrolling target for the toolkit's focused-window routing.
--- The SortedList wrapper is not itself a Scrollable; its inner .list is.
+-- Only the planner's effects list is a toolkit scrollable; the ingredients
+-- and merchant columns are hand-built with wheel + page buttons.
 function Handler:getFocusedScrollable()
-    if not open then return nil end
-    local l = state.tab == 'ingredients' and refs.ingList or refs.effList
-    return l and (l.list or l) or nil
+    if not open or state.tab ~= 'planner' then return nil end
+    return refs.effList
 end
 
 local registered = false
