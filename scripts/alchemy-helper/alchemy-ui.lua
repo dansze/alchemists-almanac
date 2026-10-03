@@ -731,7 +731,7 @@ buildPlannerContent = function(C, innerW, innerH)
         end,
     }
     btnLoc = C.textButton {
-        text = 'Location', width = 64,
+        text = 'Location', width = 76,
         onClick = function()
             state.merchSort = 'location'
             btnName:setActive(false)
@@ -752,7 +752,7 @@ buildPlannerContent = function(C, innerW, innerH)
     effList:updateProps { position = v2(PAD, LIST_Y) }
 
     local strictBox = C.checkbox {
-        text = 'STRICT MODE', default = state.strict,
+        text = 'Strict Mode', default = state.strict,
         onValueChanged = function(val)
             state.strict = val and true or false
             rebuildMerch()
